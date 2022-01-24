@@ -19,5 +19,8 @@ void test_validate_my_username()
      * config file and my_username() functions are setup properly
      */
     
-    TEST_ASSERT_EQUAL_STRING_MESSAGE(my_username(), malloc_username_from_conf_file(), "Username did not match");
+    char *username_malloc = malloc_username_from_conf_file();
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(my_username(), username_malloc, "Username did not match");
+    
+    free(username_malloc);
 }

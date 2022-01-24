@@ -1,79 +1,115 @@
+/**
+ * @file    :   writer.c
+ * @brief   :   This source file provides functions which is used to write specified data into a 
+ *				file who's path is given 
+ *              
+ *
+ * @author  :   Sanish Kharade
+ * @date    :   January 23, 2022
+ * 
+ * @tools   :   gcc, cygwin, Visual Studio Code
+ * 
+ * @link    :   syslog - https://stackoverflow.com/questions/8485333/syslog-command-in-c-code
+ *				write, close functions - Linux System Programming Chapter 2
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <string.h>
 #include <syslog.h>
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-
 
 #define ARGUMENTS 3
 #define MODE 0644
 
+/**
+ * @brief   :   Main entry point to the application
+ *
+ *              This function prints writes specified string into given file path
+ *              
+ * @param   :   argv[1] - path of the file
+ *				argv[2] - tring to be written
+ *
+ * @return  :   0
+ 
+ * @note	:	else statements are not needed after if since we are exiting on an error
+ * 
+*/
 int main(int argc, char *argv[])
 {
 
-    //printf("Hello world!\n");
-
-    //printf("Number of arguments are %d\n", argc);
+	// Open the logger
     openlog("AESD Assignment 2", LOG_PID, LOG_USER);
-//syslog(LOG_INFO, "Start logging");
 
-
+	// Check if arguments are insufficient
     if(argc < ARGUMENTS)
     {
-        // error message
+        // Log the error message
         syslog(LOG_ERR, "ERROR: Insufficient arguments");
-        //syslog(LOG_DEBUG, "Less Arguments", argc);
-        printf("Insufficient arguments\n");
         exit(1);
         
     }
+    // Check if there are too many arguments
     else if(argc > ARGUMENTS)
     {
-        // error message
+        // Log the error message
         syslog(LOG_ERR, "ERROR: Too many arguments");
-        printf("Too many arguments\n");
         exit(1);
     }
 
     int fd;
+    char *path = argv[1];
+    char *data = argv[2];
     
-    fd = creat(argv[1], MODE);
+    fd = creat(path, MODE);
 
+	// Check if the file creation was successful
     if(fd == -1)
     {
-    	// error message
-    	syslog(LOG_ERR, "ERROR: File not created");
-    	printf("Too many arguments\n");
-       
+    	// Log the error message
+    	syslog(LOG_ERR, "ERROR: File not created");       
     }
 
-    int string_length = strlen(argv[2]);
+    int string_length = strlen(data);
 
     int bytes_written = 0;
-    bytes_written = write(fd, argv[2], string_length);
+    
+    // Write the given string to the file
+    bytes_written = write(fd, data, string_length);
 
+	// Check if the write operation was successful
     if(bytes_written == -1)
     {
+    	// Log the error message
     	syslog(LOG_ERR, "ERROR: Writing unsuccessful");
     	exit(1);
-        // error message
     }
+    
+    // Check if the string was written completely
     if(bytes_written != string_length)
     {
     	// error message
     	syslog(LOG_ERR, "ERROR: String partially written");
     	exit(1); 
     }
-    syslog(LOG_DEBUG, "Writing %s to %s", argv[2], argv[1]);
-	//printf("Writing %s to %s\n", argv[2], argv[1]);
+    
+    // Log the debug message
+    syslog(LOG_DEBUG, "Writing %s to %s", data, path);
 	
+	// Close the file
+	if(close(fd) == -1)
+	{
+		// Log the error message
+    	syslog(LOG_ERR, "ERROR: Error in closing file %s", path);
+    	exit(1);
+	}
+	
+	// Close the logger
 	closelog();
-
+	
     return 0;
 }
 
