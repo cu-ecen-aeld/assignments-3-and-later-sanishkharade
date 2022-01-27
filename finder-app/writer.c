@@ -7,7 +7,6 @@
  * @author  :   Sanish Kharade
  * @date    :   January 23, 2022
  * 
- * @tools   :   gcc, cygwin, Visual Studio Code
  * 
  * @link    :   syslog - https://stackoverflow.com/questions/8485333/syslog-command-in-c-code
  *				write, close functions - Linux System Programming Chapter 2
