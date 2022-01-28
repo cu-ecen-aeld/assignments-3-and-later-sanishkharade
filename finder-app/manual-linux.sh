@@ -10,7 +10,6 @@ KERNEL_REPO=git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.gi
 KERNEL_VERSION=v5.1.10
 BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
-#FINDER_APP=/home/sanish/AESD/assignment-3-sanishkharade/finder-app
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 
@@ -24,7 +23,6 @@ fi
 
 mkdir -p ${OUTDIR}
 
-# Sanish
 # Check if directory was created successfully
 if [ ! -d "${OUTDIR}" ]
 then
@@ -45,7 +43,6 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     git checkout ${KERNEL_VERSION}
 
     # TODO: Add your kernel build steps here
-    # 5 commands - Sanish
     echo "Build Step 1: Deep Clean the Kernel Build Tree"
     make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
     
@@ -64,7 +61,8 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
 fi 
 
 echo "Adding the Image in outdir"
-# Sanish - Copy the contents to outdir
+
+# Copy the contents to outdir
 cp ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}/
 
 echo "Creating the staging directory for the root filesystem"
@@ -76,7 +74,6 @@ then
 fi
 
 # TODO: Create necessary base directories
-# 5 commands
  mkdir ${OUTDIR}/rootfs
  
 # Check if directory was created successfully
@@ -91,9 +88,6 @@ mkdir bin dev etc home lib proc sbin sys tmp usr var lib64
 mkdir usr/bin usr/lib usr/sbin
 mkdir -p var/log
 
-# Sanish - Check
-#cd ${OUTDIR}/rootfs
-#sudo chown -R root:root *
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
@@ -102,7 +96,6 @@ git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox
-    # 2 commands
     echo "Configuring busybox"
     make distclean
     make defconfig
@@ -111,7 +104,6 @@ else
 fi
 
 # TODO: Make and insatll busybox
-# 2 commands
 echo "Making and installing busybox"
 make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
 make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install
@@ -165,7 +157,5 @@ cd "$OUTDIR/rootfs"
 find . | cpio -H newc -ov --owner root:root > ${OUTDIR}/initramfs.cpio
 cd ..
 gzip -f initramfs.cpio
-
-
 
 
