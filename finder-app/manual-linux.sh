@@ -23,7 +23,7 @@ fi
 
 mkdir -p ${OUTDIR}
 
-# Check if directory was created successfully
+# Check if directory was created successfully.
 if [ ! -d "${OUTDIR}" ]
 then
 	echo "${OUTDIR} not created"
