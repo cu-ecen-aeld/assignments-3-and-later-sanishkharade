@@ -10,6 +10,23 @@ WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp/aeld-data
 username=$(cat /etc/finder-app/conf/username.txt)
 
+FINDER=$(which finder.sh)
+WRITER=$(which writer)
+
+
+# To check if 
+if [ -z $FINDER ]
+then
+	echo "finder.sh not found"
+	exit 1
+fi
+
+if [ -z $WRITER ]
+then
+	echo "writer not found"
+	exit 1
+fi
+
 if [ $# -lt 2 ]
 then
 	echo "Using default value ${WRITESTR} for string to write"
