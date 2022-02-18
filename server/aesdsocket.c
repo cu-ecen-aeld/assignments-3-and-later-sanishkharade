@@ -13,161 +13,220 @@
 #include <signal.h>
 #include <stdbool.h>
 
+#include <syslog.h>		// for syslog
+
+#define PORT "9000"
+#define MAX_CONNECTIONS 10
+
 
 int sockfd;
 int clientfd;
 char filepath[50] = "/var/tmp/aesdsocketdata";
 
-
-#define READ_SIZE 100
+// use power of 2 -> 100, 1000 didn't work
+#define RECV_SIZE 128
 
 
 static void signal_handler (int signo)
 {
+	// Gracefully exit when a SIGINT or SIGTERM is received
 	if (signo == SIGINT)
 	{
-		printf ("Caught SIGINT!\n");
+		syslog(LOG_INFO, "SIGINT received\n");
+		
+		close(sockfd);
+		close(clientfd);
 		unlink(filepath);
 	}
 	else if (signo == SIGTERM)
 	{
-		printf ("Caught SIGTERM!\n");
+		syslog(LOG_INFO, "SIGTERM received\n");
+		
+		close(sockfd);
+		close(clientfd);
 		unlink(filepath);
 	}
 	else
 	{
-	/* this should never happen */
-		fprintf (stderr, "Unexpected signal!\n");
+		/* this should never happen */
+		syslog(LOG_ERR, "Unknown Signal received\n");
 		exit (EXIT_FAILURE);
 	}
 	exit (EXIT_SUCCESS);
 }
+
 int main(int argc, char *argv[])
 {	
+
+	// Open the syslog for logging data
+	//openlog("AESD Socket Application", LOG_CONS|LOG_PERROR|LOG_PID, LOG_USER);
+	openlog("AESD Socket Application", LOG_PID, LOG_USER);
+
+	// Status variable will store the return values of functions for error checking
 	int status;
 
+	// Create structures to get the value of addrinfo
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
 
+	/*
+	* Register signal_handler as our signal handler
+	* for SIGINT and SIGTERM.
+	*/
+	if (signal (SIGINT, signal_handler) == SIG_ERR)
+	{
+		syslog(LOG_ERR, "Could not register SIGINT handler\n");
+		exit (EXIT_FAILURE);
+	}
+
+	if (signal (SIGTERM, signal_handler) == SIG_ERR)
+	{
+		syslog(LOG_ERR, "Could not register SIGTERM handler\n");
+		exit (EXIT_FAILURE);
+	}
+
+	printf("argc = %d\n", argc);
+    if ((argc >= 2) && (strcmp("-d", argv[1]) == 0))
+    {
+    	syslog(LOG_DEBUG, "Running aesdsocket as a Daemon\n");
+       	printf("Daemon\n");
+		daemon(0,0);
+    }
+	//add daemon
+	// if(argc > 1)
+	// {
+	// 	printf("Daemon\n");
+	// 	daemon(0,0);
+	// }
+
+
+	// Set the values for members of the hints structure
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET6;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	status = getaddrinfo(NULL, "9000", &hints, &result);
+	status = getaddrinfo(NULL, PORT, &hints, &result);
 	if(status != 0)
 	{
+		syslog(LOG_ERR, "ERROR: getaddrinfo()\n");
 		printf("Error in getaddrinfo");
+		exit(EXIT_FAILURE);
 	}
 
 	/* getaddrinfo() returns a list of address structures.
-	  Try each address until we successfully bind(2).
-	  If socket(2) (or bind(2)) fails, we (close the socket
-	  and) try the next address. */
-	// taken from man page of getaddrinfo
-
+	  Try each address until we successfully bind.
+	  If socket (or bind) fails, we (close the socket
+	  and) try the next address.
+	  Ref -  man page of getaddrinfo
+	 */
+	syslog(LOG_DEBUG, "Attempting to Bind\n");
 	for (rp = result; rp != NULL; rp = rp->ai_next)
 	{
 		sockfd = socket(AF_INET6, SOCK_STREAM, 0);
 		if (sockfd == -1)
 		{
-			
+			/* socket() failed */
+			syslog(LOG_ERR, "ERROR: socket()\n");
 			continue;
 		}
 		   
 		if (bind(sockfd, rp->ai_addr, rp->ai_addrlen) == 0)
 		{
+			/* Successfully bound to socket */
 			printf("rp->ai_addr = %p --- passed\n", rp->ai_addr);
 			printf("sockfd = %d --- passed\n", sockfd);
-			break;                  /* Success */
+			syslog(LOG_DEBUG, "Successfully Bound to socket\n");
+			break;                  
 		}
 		   
-
+		syslog(LOG_DEBUG, "FAILED: bind()\n");
 		printf("rp->ai_addr = %p --- failed\n", rp->ai_addr);
 		printf("sockfd = %d --- failed\n", sockfd);
 		close(sockfd);
 	}
 
-
 	freeaddrinfo(result);           /* No longer needed */
 
-	if (rp == NULL) {               /* No address succeeded */
-	   fprintf(stderr, "Could not bind\n");
-	   exit(EXIT_FAILURE);
+	if (rp == NULL)
+	{  	
+		/* No address succeeded */
+		// Socket is already closed so just exit
+	   	syslog(LOG_ERR, "ERROR: bind() - No address succeeded\n");
+	   	exit(EXIT_FAILURE);
 	}
 
-	printf("argc = %d\n", argc);
+	//char filepath[50] = "/var/tmp/aesdsocketdata";
 
-	//add daemon
-	if(argc > 1)
-	{
-		printf("Daemon\n");
-		daemon(0,0);
-	}
-
-	/*
-	* Register signal_handler as our signal handler
-	* for SIGINT.
-	*/
-	if (signal (SIGINT, signal_handler) == SIG_ERR)
-	{
-		fprintf (stderr, "Cannot handle SIGINT!\n");
-		exit (EXIT_FAILURE);
-	}
-	/*
-	* Register signal_handler as our signal handler
-	* for SIGTERM.
-	*/
-	if (signal (SIGTERM, signal_handler) == SIG_ERR)
-	{
-		fprintf (stderr, "Cannot handle SIGTERM!\n");
-		exit (EXIT_FAILURE);
-	}
-
-
-
-	char server_reply[READ_SIZE] = {0};
-	int total_data_size = 0;
-	ssize_t nread = 0;
-	char filepath[50] = "/var/tmp/aesdsocketdata";
-
-	status = listen(sockfd, 2);
+	// Listen for connections
+	syslog(LOG_DEBUG, "Listening for connections on the socket\n");
+	status = listen(sockfd, MAX_CONNECTIONS);
 	if(status == -1)
 	{
+		// listen() failed
+		syslog(LOG_ERR, "ERROR: listen()\n");
 		printf("Listen failed\n");
+		
+		close(sockfd);
+		exit(EXIT_FAILURE);
 	}
-	printf("Listen passed\n");
+	syslog(LOG_DEBUG, "Listen Passed\n");
 	
+	char recv_buffer[RECV_SIZE] = {0};
+	int total_data_size = 0;
+	ssize_t nread = 0;
 
 	while(1)
 	{
-
 		socklen_t sock_addr_size;
 		struct sockaddr client_addr;
 		sock_addr_size = sizeof(struct sockaddr);
 
 		// Accept the connection
-		clientfd = accept(sockfd, &client_addr, &sock_addr_size);
+		clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &sock_addr_size);
 		if(clientfd == -1)
 		{
+			// accept() failed
+			syslog(LOG_ERR, "ERROR: accept()\n");
 			printf("Accept failed\n");
-		}
-		printf("clientfd = %d --- Accept passed\n", clientfd);
 
+			close(sockfd);
+			exit(EXIT_FAILURE);
+		}
+
+		syslog(LOG_INFO, "Accepted Connection from %s\n", client_addr.sa_data);
+		printf("clientfd = %d --- Accept passed\n", clientfd);
+		printf("Accepted Connection from %s\n", client_addr.sa_data);
+
+		// Create the file
 		int fd = open(filepath, O_CREAT, 0644);	
+		if(fd < 0)
+		{
+			syslog(LOG_ERR, "ERROR: open()\n");
+			exit(EXIT_FAILURE);
+		}
 		close(fd);
 
-		char *storage_array = (char *)malloc(READ_SIZE * sizeof(char));
-		memset(storage_array, 0, READ_SIZE);
+		// Malloc a storage array and set it to zero (or directly use calloc())
+		char *storage_array = (char *)malloc(RECV_SIZE * sizeof(char));
+		memset(storage_array, 0, RECV_SIZE);
+
 		//storage_array[0] = '\0';
+		
 		int packet_size = 0;
 		bool enter_received = false;
+		
+		// if we want to use memcpy instead of strncpy
 		//int memcpy_counter = 0;
-
+		//char c;
+		
 		while(enter_received == false)
 		{
+			nread = 0;
+			nread = recv(clientfd, recv_buffer, RECV_SIZE, 0);
 			
-			nread = recv(clientfd, server_reply, READ_SIZE, 0);
+			//printf("nread = %ld\n", nread);
+			
 			if( nread < 0)
 			{
 				printf("recv failed\n");
@@ -175,16 +234,25 @@ int main(int argc, char *argv[])
 			else
 			{
 				int i = 0;
-				for(i = 0; i < READ_SIZE; i++)
+				// if it fails iterate through only till nread
+				for(i = 0; i < RECV_SIZE; i++)
 				{
-					if(server_reply[i] == '\n' || server_reply[i] == -1)
+					// why does this work??
+					// c = recv_buffer[i];
+					// if (c)
+					// {
+
+					// }
+					//printf("recv_buffer[%d] = %d\n", i, recv_buffer[i]);
+					//usleep(10);
+					if(recv_buffer[i] == '\n')// || recv_buffer[i] == EOF)
 					{
 						// packet complete
-						printf("Received Enter\n");
+						printf("Received Enter at i = %d\n", i);
 						enter_received = true;
 						/* In first packet 
-						 * server_reply[6] will be 'g'
-						 * server_reply[7] will be '\n'
+						 * recv_buffer[6] will be 'g'
+						 * recv_buffer[7] will be '\n'
 						 * Hence when we come into this condition i will be equal to 7
 						 * But the packet size is actually 8, hence i++
 						*/
@@ -192,9 +260,9 @@ int main(int argc, char *argv[])
 						break;
 					}
 				}
-				// Here i = 100 ---- when \n not found in the server_reply array
+				// Here i = 100 ---- when \n not found in the recv_buffer array
 				packet_size += i; 
-				
+
 				//storage_array = (char *)realloc(storage_array, (packet_size * sizeof(char) ));
 
 				/* packet_size+1 done in below line to make space for '\0' that is added by strncat after appending the string
@@ -204,41 +272,38 @@ int main(int argc, char *argv[])
 				//char *newpointer = (char *)realloc(storage_array, ((packet_size) * sizeof(char) ) );
 				if (newpointer == NULL)
 				{
-					/* problems!!!!                                 */
-					/* tell the user to stop playing DOOM and retry */
-					/* or free(oldpointer) and abort, or whatever   */
+					syslog(LOG_ERR, "ERROR: realloc()\n");
 					printf("Realloc failed\n");
-					exit(1);
+					exit(EXIT_FAILURE);
 				} 
 				else
 				{
-					/* everything ok                                                                 */
-					/* `newpointer` now points to a new memory block with the contents of oldpointer */
-					/* `oldpointer` points to an invalid address                                     */
+					// `newpointer` now points to a new memory block with the contents of oldpointer
+					// `storage_array` points to an invalid address
 					storage_array = newpointer;
-					/* oldpointer points to the correct address                                */
-					/* the contents at oldpointer have been copied while realloc did its thing */
-					/* if the new size is smaller than the old size, some data was lost        */
+					// storage_array points to the correct address
 				}
 
 				/* Using memcpy */
-				//memcpy(storage_array+memcpy_counter, server_reply, i);
+				//memcpy(storage_array+memcpy_counter, recv_buffer, i);
 				//memcpy_counter += packet_size;
 
 				/* Using strncpy */
-				strncat(storage_array, server_reply, i);
+				strncat(storage_array, recv_buffer, i);
 				//storage_array[packet_size] = '\n';
 
-				memset(server_reply, 0, READ_SIZE);
+				// Set the receive buffer to 0
+				memset(recv_buffer, 0, RECV_SIZE);
 			}
 
 		}
+		// Update total_data_size
 		total_data_size += packet_size;
 
 		/* For debugging */
 		printf("Packet Size =  %d\n", packet_size);
 		printf("total_data_size =  %d\n", total_data_size);
-		printf("Storage array = \n%s", storage_array);
+		//printf("Storage array = \n%s", storage_array);
 		
 		/* Write to file */
 		fd = open(filepath, O_WRONLY | O_APPEND);
@@ -249,7 +314,6 @@ int main(int argc, char *argv[])
 		// Open the file to read
 		fd = open(filepath, O_RDONLY);
 	
-
 		/* Logic to read one byte from the file and send one byte at a time to client*/
 		/*
 		int j = 0;
@@ -261,11 +325,11 @@ int main(int argc, char *argv[])
 			{
 				printf("read failed\n");
 			}
-			// printf("Server reply = %c\n", server_reply);
-			//printf("%c", server_reply);
+			// printf("Server reply = %c\n", recv_buffer);
+			//printf("%c", recv_buffer);
 			// replace this with writing to file
-			//strncat(output, &server_reply, nread);
-			//write(fd, server_reply, nread);
+			//strncat(output, &recv_buffer, nread);
+			//write(fd, recv_buffer, nread);
 			send(clientfd, &a, 1, 0);
 			j++;
 		}
@@ -274,6 +338,7 @@ int main(int argc, char *argv[])
 		/* Logic to read one line from the file and send one line at a time to client*/
 		char *line = NULL;
  		size_t len = 0;
+
  		// Convert fd to type FILE* to use the function getline
  		FILE *stream = fdopen(fd, "r");
 
