@@ -1,4 +1,15 @@
-//#define _GNU_SOURCE 
+/**
+ * @file    :   aesdsocket.c
+ * @brief   :   This source file reads data from a socket, appends it to a file and then 
+ * 				sends back that data to the client
+ *              
+ * @author  :   Sanish Kharade
+ * @date    :   February 18, 2022
+ * 
+ * 
+ * @link    :   For all functions - man pages and Linux System Programming book
+*/
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -14,7 +25,7 @@
 #include <stdbool.h>
 
 #include <syslog.h>		// for syslog
-#include <arpa/inet.h>
+#include <arpa/inet.h>	// for inet_ntop
 
 #define PORT "9000"
 #define MAX_CONNECTIONS 10
@@ -27,7 +38,14 @@ char filepath[50] = "/var/tmp/aesdsocketdata";
 // use power of 2 -> 100, 1000 didn't work
 #define RECV_SIZE 128
 
-
+/**
+ * @brief   :   Signal Handler function
+ *              
+ * @param   :   signo - Signal received
+ *
+ * @return  :   void
+ * 
+*/
 static void signal_handler (int signo)
 {
 	// Gracefully exit when a SIGINT or SIGTERM is received
@@ -36,6 +54,7 @@ static void signal_handler (int signo)
 		syslog(LOG_INFO, "Caught signal SIGINT, exiting\n");
 		
 		close(sockfd);
+		// To avoid closing a clientfd which has already been closed
 		if(clientfd != -1)
 			close(clientfd);
 		unlink(filepath);
@@ -45,6 +64,7 @@ static void signal_handler (int signo)
 		syslog(LOG_INFO, "Caught signal SIGTERM, exiting\n");
 		
 		close(sockfd);
+		// To avoid closing a clientfd which has already been closed
 		if(clientfd != -1)
 			close(clientfd);
 		unlink(filepath);
@@ -58,6 +78,14 @@ static void signal_handler (int signo)
 	exit (EXIT_SUCCESS);
 }
 
+/**
+ * @brief   :   Main entry point to the application
+ *              
+ * @param   :   argv[1] - -d if running as a daemon
+ *
+ * @return  :   0
+ * 
+*/
 int main(int argc, char *argv[])
 {	
 
@@ -100,7 +128,6 @@ int main(int argc, char *argv[])
 	if(status != 0)
 	{
 		syslog(LOG_ERR, "ERROR: getaddrinfo()\n");
-		printf("Error in getaddrinfo");
 		exit(EXIT_FAILURE);
 	}
 
@@ -122,7 +149,7 @@ int main(int argc, char *argv[])
 		}
 		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
     	{
-        	syslog(LOG_ERR, "socketopt\n");
+        	syslog(LOG_ERR, "ERROR: socketopt()\n");
         	exit(EXIT_FAILURE);
     	}
 		   
@@ -191,7 +218,6 @@ int main(int argc, char *argv[])
 		{
 			// accept() failed
 			syslog(LOG_ERR, "ERROR: accept()\n");
-			printf("Accept failed\n");
 
 			close(sockfd);
 			exit(EXIT_FAILURE);
@@ -235,12 +261,13 @@ int main(int argc, char *argv[])
 			
 			if( nread < 0)
 			{
-				printf("recv failed\n");
+				syslog(LOG_ERR, "ERROR: recv()\n");
+				exit(EXIT_FAILURE);
 			}
 			else
 			{
 				int i = 0;
-				// if it fails iterate through only till nread
+
 				for(i = 0; i < RECV_SIZE; i++)
 				{
 
@@ -270,7 +297,6 @@ int main(int argc, char *argv[])
 				if (newpointer == NULL)
 				{
 					syslog(LOG_ERR, "ERROR: realloc()\n");
-					printf("Realloc failed\n");
 					exit(EXIT_FAILURE);
 				} 
 				else
@@ -315,7 +341,7 @@ int main(int argc, char *argv[])
 			syslog(LOG_ERR, "ERROR: read()\n");
 		}
 
-		fdatasync(fd);
+		//fdatasync(fd);
 		close(fd);
 		
 		// Open the file to read
@@ -337,6 +363,7 @@ int main(int argc, char *argv[])
 			if( nread < 0)
 			{
 				syslog(LOG_ERR, "ERROR: read()\n");
+				exit(EXIT_FAILURE);
 			}
 
 			send(clientfd, &a, 1, 0);
