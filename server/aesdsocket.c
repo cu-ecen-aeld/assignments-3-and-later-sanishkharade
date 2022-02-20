@@ -284,6 +284,7 @@ int main(int argc, char *argv[])
 			if( nread < 0)
 			{
 				syslog(LOG_ERR, "ERROR: recv()\n");
+				free(storage_array);
 				exit(EXIT_FAILURE);
 			}
 			else
@@ -355,6 +356,7 @@ int main(int argc, char *argv[])
 		if(fd < 0)
 		{
 			syslog(LOG_ERR, "ERROR: open()\n");
+			free(storage_array);
 			exit(EXIT_FAILURE);
 		}
 		int bytes_wriiten = write(fd, storage_array, packet_size);
@@ -371,6 +373,7 @@ int main(int argc, char *argv[])
 		if(fd < 0)
 		{
 			syslog(LOG_ERR, "ERROR: open()\n");
+			free(storage_array);
 			exit(EXIT_FAILURE);
 		}
 		//lseek(fd, 0, SEEK_SET);
@@ -385,6 +388,7 @@ int main(int argc, char *argv[])
 			if( nread < 0)
 			{
 				syslog(LOG_ERR, "ERROR: read()\n");
+				free(storage_array);
 				exit(EXIT_FAILURE);
 			}
 

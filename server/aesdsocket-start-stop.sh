@@ -1,5 +1,7 @@
 #! /bin/sh
 
+# Reference - Mastering Embedded Linux Programming Chapter 10, pg no 457
+
 case "$1" in
 	start)
 		echo "Starting aesdsocket"
