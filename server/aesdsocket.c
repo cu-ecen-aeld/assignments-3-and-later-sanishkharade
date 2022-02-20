@@ -53,20 +53,38 @@ static void signal_handler (int signo)
 	{
 		syslog(LOG_INFO, "Caught signal SIGINT, exiting\n");
 		
+		if (shutdown(sockfd, SHUT_RDWR))
+        	exit(EXIT_FAILURE);
+		
 		close(sockfd);
+		
 		// To avoid closing a clientfd which has already been closed
 		if(clientfd != -1)
+		{
+			if (shutdown(clientfd, SHUT_RDWR))
+        		exit(EXIT_FAILURE);
+			
 			close(clientfd);
+		}
 		unlink(filepath);
 	}
 	else if (signo == SIGTERM)
 	{
 		syslog(LOG_INFO, "Caught signal SIGTERM, exiting\n");
 		
+		if (shutdown(sockfd, SHUT_RDWR))
+        	exit(EXIT_FAILURE);
+		
 		close(sockfd);
+		
 		// To avoid closing a clientfd which has already been closed
 		if(clientfd != -1)
+		{
+			if (shutdown(clientfd, SHUT_RDWR))
+        		exit(EXIT_FAILURE);			
+			
 			close(clientfd);
+		}
 		unlink(filepath);
 	}
 	else
@@ -213,6 +231,7 @@ int main(int argc, char *argv[])
 		sock_addr_size = sizeof(struct sockaddr);
 
 		// Accept the connection
+		syslog(LOG_INFO, "Waiting for connections\n");
 		clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &sock_addr_size);
 		if(clientfd == -1)
 		{
