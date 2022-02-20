@@ -1,13 +1,16 @@
 /**
  * @file    :   aesdsocket.c
- * @brief   :   This source file reads data from a socket, appends it to a file and then 
- * 				sends back that data to the client
+ * @brief   :   This source file reads data from a socket on port 9000, appends it to a file and then 
+ * 				sends back that data to the client when one complete packet has been read.
  *              
  * @author  :   Sanish Kharade
  * @date    :   February 18, 2022
  * 
  * 
  * @link    :   For all functions - man pages and Linux System Programming book
+ * 				Realloc - https://stackoverflow.com/questions/3850749/does-realloc-overwrite-old-contents
+ * 				Socket functions - https://beej.us/guide/bgnet/html/
+ * 				
 */
 
 #include <stdio.h>
