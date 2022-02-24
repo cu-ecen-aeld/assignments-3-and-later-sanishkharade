@@ -33,9 +33,6 @@
 #include <pthread.h>	// for pthread functions
 #include <sys/queue.h>	// FOR Linked List
 
-#include <sys/time.h>
-#include <time.h>
-
 #define PORT "9000"
 #define MAX_CONNECTIONS 10
 
@@ -45,7 +42,6 @@ int clientfd;
 char filepath[50] = "/var/tmp/aesdsocketdata";
 
 void* thread_handler(void* thread_param);
-static void time_handler(int sig_num);
 
 // use power of 2 -> 100, 1000 didn't work
 #define RECV_SIZE 128
@@ -55,7 +51,7 @@ typedef struct
 	bool thread_complete;
 	pthread_t thread;
 	int client_sock_fd;
-	//pthread_mutex_t *mutex;
+	pthread_mutex_t *mutex;
 	//char *ip_addr;
 	
 }thread_params_t;
@@ -266,20 +262,6 @@ int main(int argc, char *argv[])
 	// int total_data_size = 0;
 	// ssize_t nread = 0;
 
-	signal(SIGALRM, time_handler);
-	struct itimerval timer_val;
-	//Loading initial value as 10 and the reload value as 10
-    	timer_val.it_value.tv_sec = 10;
-    	timer_val.it_value.tv_usec = 0;
-   		timer_val.it_interval.tv_sec = 10;
-    	timer_val.it_interval.tv_usec = 0;
-    	
-    	status = setitimer(ITIMER_REAL, &timer_val, NULL);
-    	if(status) {
-    		syslog(LOG_ERR, "ERROR: setitimer() fail");
-		exit(EXIT_FAILURE);
-    	}
-
 	while(1)
 	{
 
@@ -313,7 +295,7 @@ int main(int argc, char *argv[])
 
 		datap->thread_param.client_sock_fd = clientfd;
 		datap->thread_param.thread_complete = false;
-		//datap->thread_param.mutex = &mutex_lock;
+		datap->thread_param.mutex = &mutex_lock;
 
 		pthread_create(&(datap->thread_param.thread), NULL, thread_handler, &(datap->thread_param));
 
@@ -324,12 +306,217 @@ int main(int argc, char *argv[])
 				pthread_join(datap->thread_param.thread, NULL);
 				datap = SLIST_FIRST(&head);
 				SLIST_REMOVE_HEAD(&head, entries);
+				SLIST_REMOVE(&head, datap, slist_data_s, entries);
 				free(datap);
 			//}
 		}
 		printf("All thread exited!\n");
 
 
+
+
+		//function();
+
+
+		// Create a thread 
+
+
+		// Loop through threads
+
+
+		// Check the complete flag
+
+
+		// pthread_join
+
+	// 	// Create the file
+	// 	int fd = open(filepath, O_CREAT, 0644);	
+	// 	if(fd < 0)
+	// 	{
+	// 		syslog(LOG_ERR, "ERROR: open()\n");
+	// 		exit(EXIT_FAILURE);
+	// 	}
+	// 	close(fd);
+
+	// 	// Malloc a storage array and set it to zero (or directly use calloc())
+	// 	char *storage_array = (char *)malloc(RECV_SIZE * sizeof(char));
+	// 	if (storage_array == NULL)
+	// 	{
+	// 		syslog(LOG_ERR, "ERROR: malloc()\n");
+	// 		exit(EXIT_FAILURE);
+	// 	} 
+	// 	memset(storage_array, 0, RECV_SIZE);
+		
+	// 	int packet_size = 0;
+	// 	bool enter_received = false;
+		
+	// 	// if we want to use memcpy instead of strncpy
+	// 	//int memcpy_counter = 0;
+	// 	//char c;
+		
+	// 	while(enter_received == false)
+	// 	{
+	// 		nread = 0;
+	// 		nread = recv(clientfd, recv_buffer, RECV_SIZE, 0);
+			
+	// 		if( nread < 0)
+	// 		{
+	// 			syslog(LOG_ERR, "ERROR: recv()\n");
+	// 			free(storage_array);
+	// 			exit(EXIT_FAILURE);
+	// 		}
+	// 		else
+	// 		{
+	// 			int i = 0;
+
+	// 			for(i = 0; i < RECV_SIZE; i++)
+	// 			{
+
+	// 				if(recv_buffer[i] == '\n')// || recv_buffer[i] == EOF)
+	// 				{
+	// 					// packet complete
+	// 					//printf("Received Enter at i = %d\n", i);
+	// 					enter_received = true;
+	// 					/* In first packet 
+	// 					 * recv_buffer[6] will be 'g'
+	// 					 * recv_buffer[7] will be '\n'
+	// 					 * Hence when we come into this condition i will be equal to 7
+	// 					 * But the packet size is actually 8, hence i++
+	// 					*/
+	// 					i++;	
+	// 					break;
+	// 				}
+	// 			}
+	// 			// Here i = 100 ---- when \n not found in the recv_buffer array
+	// 			packet_size += i; 
+
+	// 			/* packet_size+1 done in below line to make space for '\0' that is added by strncat after appending the string
+	// 			 * This \0 gets overwritten during the next strncat and hence there are no memory gaps between 2 packets
+	// 			*/
+	// 			char *newpointer = (char *)realloc(storage_array, ((packet_size+1) * sizeof(char) ) );
+
+	// 			if (newpointer == NULL)
+	// 			{
+	// 				syslog(LOG_ERR, "ERROR: realloc()\n");
+	// 				exit(EXIT_FAILURE);
+	// 			} 
+	// 			else
+	// 			{
+	// 				// 'newpointer' now points to a new memory block with the contents of oldpointer
+	// 				// 'storage_array' points to an invalid address
+	// 				storage_array = newpointer;
+	// 				// 'storage_array' points to the correct address
+	// 			}
+
+	// 			/* Using memcpy */
+	// 			//memcpy(storage_array+memcpy_counter, recv_buffer, i);
+	// 			//memcpy_counter += packet_size;
+	// 			//storage_array[packet_size] = '\n';
+				
+	// 			/* Using strncpy */
+	// 			strncat(storage_array, recv_buffer, i);
+
+	// 			// Set the receive buffer to 0
+	// 			memset(recv_buffer, 0, RECV_SIZE);
+	// 		}
+
+	// 	}
+	// 	// Update total_data_size
+	// 	total_data_size += packet_size;
+
+	// 	/* For debugging */
+	// 	//printf("Packet Size =  %d\n", packet_size);
+	// 	//printf("total_data_size =  %d\n", total_data_size);
+	// 	//printf("Storage array = \n%s", storage_array);
+		
+	// 	/* Write to file */
+	// 	fd = open(filepath, O_WRONLY | O_APPEND);
+	// 	if(fd < 0)
+	// 	{
+	// 		syslog(LOG_ERR, "ERROR: open()\n");
+	// 		free(storage_array);
+	// 		exit(EXIT_FAILURE);
+	// 	}
+	// 	int bytes_wriiten = write(fd, storage_array, packet_size);
+	// 	if( bytes_wriiten < 0)
+	// 	{
+	// 		syslog(LOG_ERR, "ERROR: read()\n");
+	// 	}
+
+	// 	//fdatasync(fd);
+	// 	close(fd);
+		
+	// 	// Open the file to read
+	// 	fd = open(filepath, O_RDONLY);
+	// 	if(fd < 0)
+	// 	{
+	// 		syslog(LOG_ERR, "ERROR: open()\n");
+	// 		free(storage_array);
+	// 		exit(EXIT_FAILURE);
+	// 	}
+	// 	//lseek(fd, 0, SEEK_SET);
+	
+	// 	/* Logic to read one byte from the file and send one byte at a time to client*/
+		
+	// 	int j = 0;
+	// 	char a;
+	// 	while(j < total_data_size)
+	// 	{
+	// 		nread = read(fd, &a, 1);
+	// 		if( nread < 0)
+	// 		{
+	// 			syslog(LOG_ERR, "ERROR: read()\n");
+	// 			free(storage_array);
+	// 			exit(EXIT_FAILURE);
+	// 		}
+
+	// 		send(clientfd, &a, 1, 0);
+	// 		j++;
+	// 	}
+		
+	// 	/* Logic to read multiple bytes from the file and send multiple bytes at a time to client*/
+	// 	/*		
+	// 	char *line = NULL;
+ 	// 	size_t len = 0;
+
+ 	// 	// Convert fd to type FILE* to use the function getline
+ 	// 	FILE *stream = fdopen(fd, "r");
+
+ 	//     while ((nread = getline(&line, &len, stream)) != -1)
+ 	//     {
+ 	//     	//printf("%s", line);
+ 	//     	send(clientfd, line, nread, 0);
+    //     }
+    //     free(line);
+    //     */
+        
+    //     /* Logic to read one line from the file and send one line at a time to client*/
+	// 	/*		
+	// 	memset(recv_buffer, 0, RECV_SIZE);
+    //     while((nread = read(fd, recv_buffer, RECV_SIZE) != 0))
+    //     {
+    //     	//bytes = read(fd, recv_buf, BUF_SIZE);
+    //         if (nread == -1)
+    //         {
+    //             syslog(LOG_ERR, "read\n");
+    //             return -1;
+    //         }
+    //         printf("nread = %ld, str = %s", nread, recv_buffer);
+    //         //printf("Reading %d bytes\n", bytes);
+    //         if (send(clientfd, &recv_buffer, nread, 0) == -1)
+    //         {
+    //             syslog(LOG_ERR, "send\n");
+    //         }
+    //     }
+
+    //     */
+
+	// 	close(fd);
+
+	// 	syslog(LOG_INFO, "Closed connection from %s\n", ip6);
+	// 	close(clientfd);
+	// 	clientfd = -1;
+	// 	free(storage_array);
 		
 	}
 	close(sockfd);
@@ -343,6 +530,7 @@ void* thread_handler(void* thread_param){
 	ssize_t nread = 0;
 	//char ip6[INET6_ADDRSTRLEN]; // space to hold the IPv4 string
 	thread_params_t *params = (thread_params_t*)thread_param;
+	int status = 0;
 
 	// while(1)
 	// {
@@ -369,14 +557,16 @@ void* thread_handler(void* thread_param){
 
 		// syslog(LOG_INFO, "Accepted Connection from %s\n", ip6);
 
-		// // Create the file
-		// int fd = open(filepath, O_CREAT, 0644);	
-		// if(fd < 0)
-		// {
-		// 	syslog(LOG_ERR, "ERROR: open()\n");
-		// 	exit(EXIT_FAILURE);
-		// }
-		// close(fd);
+		// Create the file
+		//pthread_mutex_lock(params->mutex);
+		int fd = open(filepath, O_CREAT, 0644);	
+		if(fd < 0)
+		{
+			syslog(LOG_ERR, "ERROR: open()\n");
+			exit(EXIT_FAILURE);
+		}
+		close(fd);
+		//pthread_mutex_unlock(params->mutex);
 
 		// Malloc a storage array and set it to zero (or directly use calloc())
 		char *storage_array = (char *)malloc(RECV_SIZE * sizeof(char));
@@ -465,14 +655,18 @@ void* thread_handler(void* thread_param){
 		total_data_size += packet_size;
 
 		/* For debugging */
-		// printf("Packet Size =  %d\n", packet_size);
-		// printf("total_data_size =  %d\n", total_data_size);
-		// printf("Storage array = \n%s", storage_array);
+		printf("Packet Size =  %d\n", packet_size);
+		printf("total_data_size =  %d\n", total_data_size);
+		printf("Storage array = \n%s", storage_array);
 		
 		/* Write to file */
-		pthread_mutex_lock(&mutex_lock);
-		int fd = open(filepath, O_CREAT|O_RDWR|O_APPEND, 0644);
-		//int fd = open(filepath, O_WRONLY | O_APPEND);
+		status = pthread_mutex_lock(params->mutex);
+		if(status)
+		{
+			syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+			exit(EXIT_FAILURE);
+		}
+		fd = open(filepath, O_WRONLY | O_APPEND);
 		if(fd < 0)
 		{
 			syslog(LOG_ERR, "ERROR: open()\n");
@@ -483,22 +677,22 @@ void* thread_handler(void* thread_param){
 		int bytes_wriiten = write(fd, storage_array, packet_size);
 		if( bytes_wriiten < 0)
 		{
-			syslog(LOG_ERR, "ERROR: read()\n");
+			syslog(LOG_ERR, "ERROR: write()\n");
 		}
 
 		//fdatasync(fd);
 		
 		//pthread_mutex_unlock(params->mutex);
-		//saclose(fd);
+		close(fd);
 		// Open the file to read
-		//fd = open(filepath, O_RDONLY);
-		// if(fd < 0)
-		// {
-		// 	syslog(LOG_ERR, "ERROR: open()\n");
-		// 	free(storage_array);
-		// 	exit(EXIT_FAILURE);
-		// }
-		lseek(fd, 0, SEEK_SET);
+		fd = open(filepath, O_RDONLY);
+		if(fd < 0)
+		{
+			syslog(LOG_ERR, "ERROR: open()\n");
+			free(storage_array);
+			exit(EXIT_FAILURE);
+		}
+		//lseek(fd, 0, SEEK_SET);
 	
 		/* Logic to read one byte from the file and send one byte at a time to client*/
 		
@@ -519,8 +713,13 @@ void* thread_handler(void* thread_param){
 			send(params->client_sock_fd, &a, 1, 0);
 			//j++;
 		}
-		close(fd);
-		pthread_mutex_unlock(&mutex_lock);
+		
+		status = pthread_mutex_unlock(params->mutex);
+		if(status)
+		{
+			syslog(LOG_ERR, "ERROR: mutex_unlock() fail");
+			exit(EXIT_FAILURE);
+		}
 		/* Logic to read multiple bytes from the file and send multiple bytes at a time to client*/
 		/*		
 		char *line = NULL;
@@ -559,7 +758,7 @@ void* thread_handler(void* thread_param){
         */
 		params->thread_complete = true;
 		
-
+		close(fd);
 		//syslog(LOG_INFO, "Closed connection from %s\n", ip6);
 		close(params->client_sock_fd);
 		clientfd = -1;
@@ -570,50 +769,3 @@ void* thread_handler(void* thread_param){
 	return thread_param;
 }
 
-static void time_handler(int sig_num) {
-
-	char timestamp[100];
-	time_t t;
-	struct tm *tmp;
-	time(&t);
-	int len, rc;
-
-	tmp = localtime(&t);
-	len = strftime(timestamp, sizeof(timestamp), "timestamp: %k:%M:%S- %d.%b.%Y\n", tmp);
-	
-	
-	rc = pthread_mutex_lock(&mutex_lock);
-
-	if(rc){
-		syslog(LOG_ERR, "ERROR: lock() fail");
-		exit(EXIT_FAILURE);
-	}
-	
-	
-	int fd = open(filepath, O_CREAT|O_RDWR|O_APPEND, 0644);
-	if( fd == -1 ){
-		syslog(LOG_ERR, "ERROR: open() fail");
-		exit(EXIT_FAILURE);
-	}
-
-	
-	
-
-	//lseek(fd, 0, SEEK_END); //Write to EOF
-	rc = write(fd, timestamp, len);
-	//total_size += len;
-	syslog(LOG_DEBUG, "stamp = %s", timestamp);
-	if(rc == -1){
-		syslog(LOG_ERR, "ERROR: write() fail");
-		exit(EXIT_FAILURE);
-	}
-	
-	pthread_mutex_unlock(&mutex_lock);
-	if(rc == -1){
-		syslog(LOG_ERR, "ERROR: unlock() fail");
-		exit(EXIT_FAILURE);
-	}
-
-	close(fd);
-
-} 
