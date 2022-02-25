@@ -1,13 +1,25 @@
 CROSS_COMPILE = 
 CC = $(CROSS_COMPILE)gcc
 CFLAGS = -Wall -Werror -g -pthread
-	
-all: aesdsocket
 
-aesdsocket: aesdsocket.o
-	$(CC) $(CFLAGS) aesdsocket.c -o aesdsocket
-	
-executible = aesdsocket
-	
+#linker flags
+LDFLAGS = -pthread -lrt 
+
+# Source files
+SRCS = aesdsocket.c
+
+# Object files
+OBJS = $(SRCS:.c=.o)
+
+TARGET = aesdsocket
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+
+
+.PHONY: clean	
+
 clean:
-	rm -f $(executible) *.o
+	rm -f $(TARGET) *.o
