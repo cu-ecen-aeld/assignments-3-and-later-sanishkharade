@@ -1,9 +1,24 @@
-CROSS_COMPILE = 
-CC = $(CROSS_COMPILE)gcc
-CFLAGS = -Wall -Werror -g -pthread
+#CROSS_COMPILE = 
+
+#CC = $(CROSS_COMPILE)gcc
+
+ifeq ($(CC),)
+	CC= $(CROSS_COMPILE)gcc
+endif
+
+
+ifeq ($(CFLAGS),)
+	CFLAGS= -g -Wall -Werror
+endif
+
+#CFLAGS = -Wall -Werror -g -pthread
 
 #linker flags
-LDFLAGS = -pthread -lrt 
+ifeq ($(LDFLAGS),)
+	LDFLAGS= -pthread -lrt
+endif
+
+#LDFLAGS = -pthread -lrt 
 
 # Source files
 SRCS = aesdsocket.c
@@ -14,6 +29,8 @@ OBJS = $(SRCS:.c=.o)
 TARGET = aesdsocket
 
 all: $(TARGET)
+default: $(TARGET)
+
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
@@ -22,4 +39,4 @@ $(TARGET): $(OBJS)
 .PHONY: clean	
 
 clean:
-	rm -f $(TARGET) *.o
+	rm -f $(TARGET) *.o *.elf *.map
