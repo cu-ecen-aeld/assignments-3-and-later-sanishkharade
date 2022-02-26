@@ -155,11 +155,13 @@ int main(int argc, char *argv[])
 
 	// Linked List
 	slist_data_t *datap = NULL;
+	slist_data_t *temp = NULL;
 	SLIST_HEAD(slisthead, slist_data_s) head;
 
 	SLIST_INIT(&head);
 	pthread_mutex_init(&mutex_lock, NULL);
 
+	remove(filepath);
 
 
 	/*
@@ -279,7 +281,7 @@ int main(int argc, char *argv[])
     		syslog(LOG_ERR, "ERROR: setitimer() fail");
 		exit(EXIT_FAILURE);
     	}
-
+	int p = 1;
 	while(1)
 	{
 
@@ -307,7 +309,7 @@ int main(int argc, char *argv[])
 
 		// Allocating memory for new node
 		datap = (slist_data_t *) malloc (sizeof(slist_data_t));
-
+		//temp
 		// Added new node to the linked list at the head
 		SLIST_INSERT_HEAD(&head, datap, entries); 
 
@@ -317,15 +319,18 @@ int main(int argc, char *argv[])
 
 		pthread_create(&(datap->thread_param.thread), NULL, thread_handler, &(datap->thread_param));
 
-		SLIST_FOREACH(datap, &head, entries)
+		SLIST_FOREACH(temp, &head, entries)
 		{
-			//if(datap->thread_param.thread_complete == true)
-			//{
-				pthread_join(datap->thread_param.thread, NULL);
-				datap = SLIST_FIRST(&head);
-				SLIST_REMOVE_HEAD(&head, entries);
-				free(datap);
-			//}
+			if(temp->thread_param.thread_complete == true)
+			{
+				
+				pthread_join(temp->thread_param.thread, NULL);
+				// datap = SLIST_FIRST(&head);
+				// SLIST_REMOVE_HEAD(&head, entries);
+				SLIST_REMOVE(&head, temp, slist_data_s, entries);
+				printf("%d\n",p++);
+				free(temp);
+			}
 		}
 		printf("All thread exited!\n");
 
@@ -393,15 +398,17 @@ void* thread_handler(void* thread_param){
 		// if we want to use memcpy instead of strncpy
 		//int memcpy_counter = 0;
 		//char c;
-		
+		printf("clientfd = %d\n", params->client_sock_fd);
 		while(enter_received == false)
 		{
 			nread = 0;
+			
 			nread = recv(params->client_sock_fd, recv_buffer, RECV_SIZE, 0);
 			
 			if( nread < 0)
 			{
-				syslog(LOG_ERR, "ERROR: recv()\n");
+				syslog(LOG_ERR, "ERROR: recv() %s \n", strerror(nread));
+				perror("RECV");
 				free(storage_array);
 				exit(EXIT_FAILURE);
 			}
@@ -468,9 +475,15 @@ void* thread_handler(void* thread_param){
 		// printf("Packet Size =  %d\n", packet_size);
 		// printf("total_data_size =  %d\n", total_data_size);
 		// printf("Storage array = \n%s", storage_array);
-		
+		int status;
 		/* Write to file */
-		pthread_mutex_lock(&mutex_lock);
+		status = pthread_mutex_lock(&mutex_lock);
+		if(status)
+		{
+			syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+			exit(EXIT_FAILURE);
+		}
+
 		int fd = open(filepath, O_CREAT|O_RDWR|O_APPEND, 0644);
 		//int fd = open(filepath, O_WRONLY | O_APPEND);
 		if(fd < 0)
@@ -506,6 +519,7 @@ void* thread_handler(void* thread_param){
 		char a;
 		//while(j < total_data_size)
 		//pthread_mutex_lock(params->mutex);
+		// reading doesnt need a lock
 		while((nread = read(fd, &a, 1)) != 0)
 		{
 			//nread = read(fd, &a, 1);
@@ -520,7 +534,12 @@ void* thread_handler(void* thread_param){
 			//j++;
 		}
 		close(fd);
-		pthread_mutex_unlock(&mutex_lock);
+		status = pthread_mutex_unlock(&mutex_lock);
+		if(status)
+		{
+			syslog(LOG_ERR, "ERROR: mutex_unlock() fail");
+			exit(EXIT_FAILURE);
+		}
 		/* Logic to read multiple bytes from the file and send multiple bytes at a time to client*/
 		/*		
 		char *line = NULL;
@@ -561,8 +580,9 @@ void* thread_handler(void* thread_param){
 		
 
 		//syslog(LOG_INFO, "Closed connection from %s\n", ip6);
+		//shutdown(params->client_sock_fd, SHUT_RDWR);
 		close(params->client_sock_fd);
-		clientfd = -1;
+		//clientfd = -1;
 		free(storage_array);
 		
 	// }
