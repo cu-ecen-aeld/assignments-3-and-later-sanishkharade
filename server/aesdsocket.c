@@ -39,7 +39,7 @@
 #define PORT "9000"
 #define MAX_CONNECTIONS 10
 
-
+bool application_running = true;
 int sockfd;
 int clientfd;
 char filepath[50] = "/var/tmp/aesdsocketdata";
@@ -118,6 +118,7 @@ static void signal_handler (int signo)
 	// 		break;
 	// 	}
 	// }
+	application_running = false;
 	if (signo == SIGINT)
 	{
 		syslog(LOG_INFO, "Caught signal SIGINT, exiting\n");
@@ -344,7 +345,7 @@ int main(int argc, char *argv[])
 		syslog(LOG_INFO, "Waiting for connections\n");
 		clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &sock_addr_size);
 		//check if application exited
-		if(clientfd == -1)
+		if(clientfd == -1 && application_running) 
 		{
 			// accept() failed
 			//syslog(LOG_ERR, "ERROR: accept() %s\n", strerror(clientfd));
