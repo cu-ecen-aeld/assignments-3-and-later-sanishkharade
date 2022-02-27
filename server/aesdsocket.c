@@ -46,6 +46,7 @@ char filepath[50] = "/var/tmp/aesdsocketdata";
 
 void* thread_handler(void* thread_param);
 static void time_handler(int sig_num);
+void* cleanup_handler(void* arg);
 
 // use power of 2 -> 100, 1000 didn't work
 #define RECV_SIZE 128
@@ -60,7 +61,7 @@ typedef struct
 	
 }thread_params_t;
 
-
+SLIST_HEAD(slisthead, slist_data_s) head;
 // Linked List Implementation
 typedef struct slist_data_s slist_data_t;
 struct slist_data_s
@@ -155,8 +156,9 @@ int main(int argc, char *argv[])
 
 	// Linked List
 	slist_data_t *datap = NULL;
-	slist_data_t *temp = NULL;
-	SLIST_HEAD(slisthead, slist_data_s) head;
+	// slist_data_t *temp = NULL;
+	// int p;
+	// SLIST_HEAD(slisthead, slist_data_s) head;
 
 	SLIST_INIT(&head);
 	pthread_mutex_init(&mutex_lock, NULL);
@@ -268,6 +270,14 @@ int main(int argc, char *argv[])
 	// int total_data_size = 0;
 	// ssize_t nread = 0;
 
+	pthread_t thread;
+    status = pthread_create(&thread, NULL, cleanup_handler, &head);
+    if (status)
+    {
+        syslog(LOG_ERR, "pthread_create failed with error: %s", strerror(status));
+        exit(EXIT_FAILURE);
+    }
+
 	signal(SIGALRM, time_handler);
 	struct itimerval timer_val;
 	//Loading initial value as 10 and the reload value as 10
@@ -281,7 +291,10 @@ int main(int argc, char *argv[])
     		syslog(LOG_ERR, "ERROR: setitimer() fail");
 		exit(EXIT_FAILURE);
     	}
-	int p = 1;
+
+		
+
+	
 	while(1)
 	{
 
@@ -319,20 +332,20 @@ int main(int argc, char *argv[])
 
 		pthread_create(&(datap->thread_param.thread), NULL, thread_handler, &(datap->thread_param));
 
-		SLIST_FOREACH(temp, &head, entries)
-		{
-			if(temp->thread_param.thread_complete == true)
-			{
+		// SLIST_FOREACH(temp, &head, entries)
+		// {
+		// 	if(temp->thread_param.thread_complete == true)
+		// 	{
 				
-				pthread_join(temp->thread_param.thread, NULL);
-				// datap = SLIST_FIRST(&head);
-				// SLIST_REMOVE_HEAD(&head, entries);
-				SLIST_REMOVE(&head, temp, slist_data_s, entries);
-				printf("%d\n",p++);
-				free(temp);
-			}
-		}
-		printf("All thread exited!\n");
+		// 		pthread_join(temp->thread_param.thread, NULL);
+		// 		// datap = SLIST_FIRST(&head);
+		// 		// SLIST_REMOVE_HEAD(&head, entries);
+		// 		SLIST_REMOVE(&head, temp, slist_data_s, entries);
+		// 		printf("%d\n",p++);
+		// 		free(temp);
+		// 	}
+		// }
+		// printf("All thread exited!\n");
 
 
 		
@@ -341,7 +354,48 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+void* cleanup_handler(void* arg){
 
+	//SLIST_HEAD(slisthead, slist_data_s) head_clean = arg;
+// head_clean = (slist_data_t*)arg;
+	struct slisthead *head_clean = (struct slisthead*) arg;
+//slist_data_t *head_clean = arg;
+	slist_data_t *temps = NULL;
+    while (1)
+    {
+        //struct node *temp_thread = NULL;
+        SLIST_FOREACH(temps, head_clean, entries)
+        {
+            if(temps->thread_param.thread_complete == true)
+            {
+                //printf("Found dead thread: %ld\n", temp_thread->thread_id);
+
+                // close client fds
+                shutdown(temps->thread_param.client_sock_fd, SHUT_RDWR);
+                //syslog(LOG_DEBUG, "Closed connection from %s\n", temp_thread->ip);
+
+                //join thread
+                int p_ret = -1;
+                p_ret = pthread_join(temps->thread_param.thread, NULL);
+                if (p_ret)
+                {
+                    syslog(LOG_ERR, "pthread_join failed with error: %s", strerror(p_ret));
+                    exit(EXIT_FAILURE);
+                }
+
+                //remove thread from list
+				SLIST_REMOVE(head_clean, temps, slist_data_s, entries);
+                //TAILQ_REMOVE(head, temp_thread, nodes);
+                free(temps);
+
+                break;
+            }
+        }
+        usleep(10);
+    }
+    return NULL;
+
+}
 void* thread_handler(void* thread_param){
 	char recv_buffer[RECV_SIZE] = {0};
 	int total_data_size = 0;
