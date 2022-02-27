@@ -26,6 +26,7 @@
 #include <linux/fs.h>	// for daemon
 #include <signal.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include <syslog.h>		// for syslog
 #include <arpa/inet.h>	// for inet_ntop
@@ -191,33 +192,57 @@ int main(int argc, char *argv[])
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
 
-	char ip6[INET6_ADDRSTRLEN]; // space to hold the IPv4 string
+	char ipv4[INET_ADDRSTRLEN]; // space to hold the IPv4 string
 
-	// Linked List
+	// Linked List Node
 	slist_data_t *datap = NULL;
 	// slist_data_t *temp = NULL;
 	// int p;
 	// SLIST_HEAD(slisthead, slist_data_s) head;
 
 	SLIST_INIT(&head);
-	pthread_mutex_init(&mutex_lock, NULL);
 
-	remove(filepath);
+	status = pthread_mutex_init(&mutex_lock, NULL);
+	if(status != 0)
+	{
+		syslog(LOG_ERR, "ERROR: pthread_mutex_init() : %s\n", strerror(errno));	
+		exit(EXIT_FAILURE);
+	}
 
+	status = unlink(filepath);
+	if(status != 0)
+	{
+		if(errno == ENOENT)
+		{
+			// File did not exist
+			syslog(LOG_DEBUG, "File %s did not exist\n", filepath);
+		}
+		else
+		{
+			//Error
+			syslog(LOG_ERR, "ERROR: unlink() : %s\n", strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+	}
+	else
+	{
+		// If file existed, delete it before starting the application
+		syslog(LOG_DEBUG, "Deleting file %s\n", filepath);
+	}
 
 	/*
 	* Register signal_handler as our signal handler
 	* for SIGINT and SIGTERM.
 	*/
-	if (signal (SIGINT, signal_handler) == SIG_ERR)
+	if (signal(SIGINT, signal_handler) == SIG_ERR)
 	{
-		syslog(LOG_ERR, "Could not register SIGINT handler\n");
+		syslog(LOG_ERR, "ERROR: Could not register SIGINT handler\n");
 		exit (EXIT_FAILURE);
 	}
 
-	if (signal (SIGTERM, signal_handler) == SIG_ERR)
+	if (signal(SIGTERM, signal_handler) == SIG_ERR)
 	{
-		syslog(LOG_ERR, "Could not register SIGTERM handler\n");
+		syslog(LOG_ERR, "ERROR: Could not register SIGTERM handler\n");
 		exit (EXIT_FAILURE);
 	}
 
@@ -230,7 +255,9 @@ int main(int argc, char *argv[])
 	status = getaddrinfo(NULL, PORT, &hints, &result);
 	if(status != 0)
 	{
-		syslog(LOG_ERR, "ERROR: getaddrinfo()\n");
+		//syslog(LOG_ERR, "ERROR: getaddrinfo()\n");
+		syslog(LOG_ERR, "ERROR: getaddrinfo() : %s\n", gai_strerror(status));
+		
 		exit(EXIT_FAILURE);
 	}
 
@@ -247,12 +274,14 @@ int main(int argc, char *argv[])
 		if (sockfd == -1)
 		{
 			/* socket() failed */
-			syslog(LOG_ERR, "ERROR: socket()\n");
+			//syslog(LOG_ERR, "ERROR: socket()\n");
+			syslog(LOG_ERR, "ERROR: socket() : %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
 		}
 		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
     	{
-        	syslog(LOG_ERR, "ERROR: socketopt()\n");
+			syslog(LOG_ERR, "ERROR: socketopt() : %s\n", strerror(errno));
+        	//syslog(LOG_ERR, "ERROR: socketopt()\n");
         	exit(EXIT_FAILURE);
     	}
 		   
@@ -274,6 +303,7 @@ int main(int argc, char *argv[])
 		/* No address succeeded */
 		// Socket is already closed so just exit
 	   	syslog(LOG_ERR, "ERROR: bind() - No address succeeded\n");
+		//syslog(LOG_ERR, "ERROR: daemon() : %s\n", strerror(errno));
 	   	exit(EXIT_FAILURE);
 	}
 
@@ -284,8 +314,8 @@ int main(int argc, char *argv[])
 		if(status == -1)
 		{
 			// daemon() failed
-			syslog(LOG_ERR, "ERROR: daemon()\n");
-		
+			//syslog(LOG_ERR, "ERROR: daemon()\n");
+			syslog(LOG_ERR, "ERROR: daemon() : %s\n", strerror(errno));
 			close(sockfd);
 			exit(EXIT_FAILURE);
 		}	
@@ -297,43 +327,45 @@ int main(int argc, char *argv[])
 	if(status == -1)
 	{
 		// listen() failed
-		syslog(LOG_ERR, "ERROR: listen()\n");
-		
+		//syslog(LOG_ERR, "ERROR: listen()\n");
+		syslog(LOG_ERR, "ERROR: listen() : %s\n", strerror(errno));
 		close(sockfd);
 		exit(EXIT_FAILURE);
 	}
 	syslog(LOG_DEBUG, "Listen Passed\n");
 	
-	//function();
-	// char recv_buffer[RECV_SIZE] = {0};
-	// int total_data_size = 0;
-	// ssize_t nread = 0;
-
 	pthread_t thread;
     status = pthread_create(&thread, NULL, cleanup_handler, &head);
     if (status)
     {
-        syslog(LOG_ERR, "pthread_create failed with error: %s", strerror(status));
+        syslog(LOG_ERR, "ERROR: pthread_create() : %s\n", strerror(status));
         exit(EXIT_FAILURE);
     }
 
-	signal(SIGALRM, time_handler);
-	struct itimerval timer_val;
-	//Loading initial value as 10 and the reload value as 10
-    	timer_val.it_value.tv_sec = 10;
-    	timer_val.it_value.tv_usec = 0;
-   		timer_val.it_interval.tv_sec = 10;
-    	timer_val.it_interval.tv_usec = 0;
+	//signal(SIGALRM, time_handler);
+	if (signal(SIGALRM, time_handler) == SIG_ERR)
+	{
+		syslog(LOG_ERR, "ERROR: Could not register SIGALRM handler\n");
+		exit (EXIT_FAILURE);
+	}
+
+	struct itimerval timer_duration;
+	// Loading initial value as 10 and the reload interval as 10
+	timer_duration.it_value.tv_sec = 10;
+	timer_duration.it_value.tv_usec = 0;
+	timer_duration.it_interval.tv_sec = 10;
+	timer_duration.it_interval.tv_usec = 0;
     	
-    	status = setitimer(ITIMER_REAL, &timer_val, NULL);
-    	if(status) {
-    		syslog(LOG_ERR, "ERROR: setitimer() fail");
+	status = setitimer(ITIMER_REAL, &timer_duration, NULL);
+	if(status != 0)
+	{
+		// Error 
+		//syslog(LOG_ERR, "ERROR: setitimer() fail");
+		syslog(LOG_ERR, "ERROR: setitimer() : %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
-    	}
+	}
 
-		
 
-	
 	while(1)
 	{
 
@@ -349,7 +381,8 @@ int main(int argc, char *argv[])
 		{
 			// accept() failed
 			//syslog(LOG_ERR, "ERROR: accept() %s\n", strerror(clientfd));
-			syslog(LOG_ERR, "ERROR: accept() \n");
+			//syslog(LOG_ERR, "ERROR: accept() \n");
+			syslog(LOG_ERR, "ERROR: accept() : %s\n", strerror(errno));
 			//perror("accept %s\n", strerror(clientfd));
 			shutdown(clientfd, SHUT_RDWR);
 			//close(sockfd);
@@ -358,13 +391,20 @@ int main(int argc, char *argv[])
 		
         struct sockaddr_in *sa = (struct sockaddr_in *)&client_addr;
 
-        inet_ntop(AF_INET, &(sa->sin_addr), ip6, INET_ADDRSTRLEN);
-
-		syslog(LOG_INFO, "Accepted Connection from %s\n", ip6);
+        const char *ret = inet_ntop(AF_INET, &(sa->sin_addr), ipv4, INET_ADDRSTRLEN);
+		if(ret == NULL)
+		{
+			syslog(LOG_ERR, "ERROR: inet_ntop() : %s\n", strerror(errno));
+		}
+		else
+		{
+			syslog(LOG_INFO, "Accepted Connection from %s\n", ipv4);
+		}
+		
 
 		// Allocating memory for new node
-		datap = (slist_data_t *) malloc (sizeof(slist_data_t));
-		//temp
+		datap = (slist_data_t*) malloc (sizeof(slist_data_t));
+
 		// Added new node to the linked list at the head
 		SLIST_INSERT_HEAD(&head, datap, entries); 
 
@@ -372,8 +412,12 @@ int main(int argc, char *argv[])
 		datap->thread_param.thread_complete = false;
 		//datap->thread_param.mutex = &mutex_lock;
 
-		pthread_create(&(datap->thread_param.thread), NULL, thread_handler, &(datap->thread_param));
-
+		status = pthread_create(&(datap->thread_param.thread), NULL, thread_handler, &(datap->thread_param));
+		if (status)
+		{
+			syslog(LOG_ERR, "ERROR: pthread_create() : %s\n", strerror(status));
+			exit(EXIT_FAILURE);
+		}
 		// SLIST_FOREACH(temp, &head, entries)
 		// {
 		// 	if(temp->thread_param.thread_complete == true)
@@ -443,7 +487,7 @@ void* thread_handler(void* thread_param){
 	char recv_buffer[RECV_SIZE] = {0};
 	int total_data_size = 0;
 	ssize_t nread = 0;
-	//char ip6[INET6_ADDRSTRLEN]; // space to hold the IPv4 string
+	//char ipv4[INET6_ADDRSTRLEN]; // space to hold the IPv4 string
 	thread_params_t *params = (thread_params_t*)thread_param;
 
 	// while(1)
@@ -467,9 +511,9 @@ void* thread_handler(void* thread_param){
 		
         // struct sockaddr_in *sa = (struct sockaddr_in *)&client_addr;
 
-        // inet_ntop(AF_INET, &(sa->sin_addr), ip6, INET_ADDRSTRLEN);
+        // inet_ntop(AF_INET, &(sa->sin_addr), ipv4, INET_ADDRSTRLEN);
 
-		// syslog(LOG_INFO, "Accepted Connection from %s\n", ip6);
+		// syslog(LOG_INFO, "Accepted Connection from %s\n", ipv4);
 
 		// // Create the file
 		// int fd = open(filepath, O_CREAT, 0644);	
@@ -676,7 +720,7 @@ void* thread_handler(void* thread_param){
 		params->thread_complete = true;
 		
 
-		//syslog(LOG_INFO, "Closed connection from %s\n", ip6);
+		//syslog(LOG_INFO, "Closed connection from %s\n", ipv4);
 		shutdown(params->client_sock_fd, SHUT_RDWR);
 		//close(params->client_sock_fd);
 		//clientfd = -1;
