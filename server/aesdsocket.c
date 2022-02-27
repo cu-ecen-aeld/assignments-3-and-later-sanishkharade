@@ -72,6 +72,8 @@ struct slist_data_s
 
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 
+//struct slisthead head_clean = NULL;
+
 /**
  * @brief   :   Signal Handler function
  *              
@@ -82,22 +84,56 @@ pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 */
 static void signal_handler (int signo)
 {
+	//free(&head);
 	// Gracefully exit when a SIGINT or SIGTERM is received
+	// struct slist_data_s *n = SLIST_FIRST(&head);
+	// SLIST_REMOVE_HEAD(&head, entries);
+	// pthread_join(n->thread_param.thread, NULL);
+	// free(n);
+	// slist_data_t *temp2 = NULL;
+	// 	SLIST_FOREACH(temp2, &head, entries)
+	// {
+	// 	if(temp2->thread_param.thread_complete == true)
+	// 	{
+	// 		//printf("Found dead thread: %ld\n", temp_thread->thread_id);
+
+	// 		// close client fds
+	// 		shutdown(temp2->thread_param.client_sock_fd, SHUT_RDWR);
+	// 		//syslog(LOG_DEBUG, "Closed connection from %s\n", temp_thread->ip);
+
+	// 		//join thread
+	// 		// int p_ret = -1;
+	// 		// p_ret = pthread_join(temp2->thread_param.thread, NULL);
+	// 		// if (p_ret)
+	// 		// {
+	// 		// 	syslog(LOG_ERR, "pthread_join failed with error: %s", strerror(p_ret));
+	// 		// 	exit(EXIT_FAILURE);
+	// 		// }
+
+	// 		//remove thread from list
+	// 		SLIST_REMOVE(&head, temp2, slist_data_s, entries);
+	// 		//TAILQ_REMOVE(head, temp_thread, nodes);
+	// 		free(temp2);
+
+	// 		break;
+	// 	}
+	// }
 	if (signo == SIGINT)
 	{
 		syslog(LOG_INFO, "Caught signal SIGINT, exiting\n");
 		
-		if (shutdown(sockfd, SHUT_RDWR))
-        	exit(EXIT_FAILURE);
-		
+		// if (shutdown(sockfd, SHUT_RDWR))
+        // 	exit(EXIT_FAILURE);
+
+		shutdown(sockfd, SHUT_RDWR);
 		close(sockfd);
 		
 		// To avoid closing a clientfd which has already been closed
 		if(clientfd != -1)
 		{
-			if (shutdown(clientfd, SHUT_RDWR))
-        		exit(EXIT_FAILURE);
-			
+			// if (shutdown(clientfd, SHUT_RDWR))
+        	// 	exit(EXIT_FAILURE);
+			shutdown(clientfd, SHUT_RDWR);
 			close(clientfd);
 		}
 		unlink(filepath);
@@ -106,16 +142,18 @@ static void signal_handler (int signo)
 	{
 		syslog(LOG_INFO, "Caught signal SIGTERM, exiting\n");
 		
-		if (shutdown(sockfd, SHUT_RDWR))
-        	exit(EXIT_FAILURE);
+		// if (shutdown(sockfd, SHUT_RDWR))
+        // 	exit(EXIT_FAILURE);
+		shutdown(sockfd, SHUT_RDWR);
 		
 		close(sockfd);
 		
 		// To avoid closing a clientfd which has already been closed
 		if(clientfd != -1)
 		{
-			if (shutdown(clientfd, SHUT_RDWR))
-        		exit(EXIT_FAILURE);			
+			// if (shutdown(clientfd, SHUT_RDWR))
+        	// 	exit(EXIT_FAILURE);
+			shutdown(clientfd, SHUT_RDWR);		
 			
 			close(clientfd);
 		}
@@ -305,12 +343,15 @@ int main(int argc, char *argv[])
 		// Accept the connection
 		syslog(LOG_INFO, "Waiting for connections\n");
 		clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &sock_addr_size);
+		//check if application exited
 		if(clientfd == -1)
 		{
 			// accept() failed
-			syslog(LOG_ERR, "ERROR: accept()\n");
-
-			close(sockfd);
+			//syslog(LOG_ERR, "ERROR: accept() %s\n", strerror(clientfd));
+			syslog(LOG_ERR, "ERROR: accept() \n");
+			//perror("accept %s\n", strerror(clientfd));
+			shutdown(clientfd, SHUT_RDWR);
+			//close(sockfd);
 			exit(EXIT_FAILURE);
 		}
 		
@@ -359,6 +400,7 @@ void* cleanup_handler(void* arg){
 	//SLIST_HEAD(slisthead, slist_data_s) head_clean = arg;
 // head_clean = (slist_data_t*)arg;
 	struct slisthead *head_clean = (struct slisthead*) arg;
+	//head_clean = (struct slisthead*) arg;
 //slist_data_t *head_clean = arg;
 	slist_data_t *temps = NULL;
     while (1)
@@ -634,8 +676,8 @@ void* thread_handler(void* thread_param){
 		
 
 		//syslog(LOG_INFO, "Closed connection from %s\n", ip6);
-		//shutdown(params->client_sock_fd, SHUT_RDWR);
-		close(params->client_sock_fd);
+		shutdown(params->client_sock_fd, SHUT_RDWR);
+		//close(params->client_sock_fd);
 		//clientfd = -1;
 		free(storage_array);
 		
