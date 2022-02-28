@@ -26,14 +26,14 @@
 #include <linux/fs.h>	// for daemon
 #include <signal.h>
 #include <stdbool.h>
-#include <errno.h>
+#include <errno.h>		// for errno
 
 #include <syslog.h>		// for syslog
 #include <arpa/inet.h>	// for inet_ntop
 
 #include <pthread.h>	// for pthread functions
-#include <sys/queue.h>	// FOR Linked List
-#include <poll.h>
+#include <sys/queue.h>	// for Linked List
+#include <poll.h>		// for poll()
 
 #include <sys/time.h>
 #include <time.h>
@@ -64,7 +64,6 @@ typedef struct
 	pthread_t thread;
 	int client_sock_fd;
 	char *ip_v4;
-	
 }thread_params_t;
 
 // Linked List Implementation
@@ -77,11 +76,10 @@ struct slist_data_s
 	SLIST_ENTRY(slist_data_s) entries;
 };
 
-
-// Mutex
+// Mutex 
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 
-//struct slisthead head_cleanup = NULL;
+pthread_t cleanup_thread;
 
 /**
  * @brief   :   Signal Handler function
@@ -93,122 +91,60 @@ pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 */
 static void signal_handler (int signo)
 {
-
-	//int status;
-
-
+	// Keeping the signal handler as small as possible 
 	application_running = false;
-	// shutdown(sockfd, SHUT_RDWR);
-	// close(sockfd);
+
 	if (signo == SIGINT)
 	{
 		syslog(LOG_INFO, "Caught signal SIGINT, exiting\n");
-		
-		// if (shutdown(sockfd, SHUT_RDWR))
-        // 	exit(EXIT_FAILURE);
-
-		// shutdown(sockfd, SHUT_RDWR);
-		// close(sockfd);
-		
-		// // To avoid closing a clientfd which has already been closed
-		// if(clientfd != -1)
-		// {
-		// 	// if (shutdown(clientfd, SHUT_RDWR))
-        // 	// 	exit(EXIT_FAILURE);
-		// 	shutdown(clientfd, SHUT_RDWR);
-		// 	close(clientfd);
-		// }
-		//unlink(filepath);
 	}
 	else if (signo == SIGTERM)
 	{
 		syslog(LOG_INFO, "Caught signal SIGTERM, exiting\n");
-		
-		// if (shutdown(sockfd, SHUT_RDWR))
-        // 	exit(EXIT_FAILURE);
-		// shutdown(sockfd, SHUT_RDWR);
-		
-		// close(sockfd);
-		
-		// // To avoid closing a clientfd which has already been closed
-		// if(clientfd != -1)
-		// {
-		// 	// if (shutdown(clientfd, SHUT_RDWR))
-        // 	// 	exit(EXIT_FAILURE);
-		// 	shutdown(clientfd, SHUT_RDWR);		
-			
-		// 	close(clientfd);
-		// }
-		//unlink(filepath);
 	}
-	else
-	{
-		//  this should never happen 
-		syslog(LOG_ERR, "Unknown Signal received\n");
-		exit (EXIT_FAILURE);
-	}
-	// status = pthread_mutex_destroy(&mutex_lock);
-	// if(status != 0)
-	// {
-	// 	syslog(LOG_ERR, "ERROR: pthread_mutex_destroy() : %s\n", strerror(status));	
-	// 	exit(EXIT_FAILURE);
-	// }
-
-	// status = unlink(filepath);
-	// if(status != 0)
-	// {
-	// 	if(errno == ENOENT)
-	// 	{
-	// 		// File did not exist
-	// 		syslog(LOG_DEBUG, "File %s did not exist\n", filepath);
-	// 	}
-	// 	else
-	// 	{
-	// 		//Error
-	// 		syslog(LOG_ERR, "ERROR: unlink() : %s\n", strerror(errno));
-	// 		exit(EXIT_FAILURE);
-	// 	}
-	// }
 	// else
 	// {
-	// 	// If file existed, delete it before starting the application
-	// 	syslog(LOG_DEBUG, "Deleting file %s\n", filepath);
+	// 	//  this should never happen 
+	// 	syslog(LOG_ERR, "Unknown Signal received\n");
+	// 	exit (EXIT_FAILURE);
 	// }
-
-	// exit (EXIT_SUCCESS);
 }
+
+
+/**
+ * @brief   :   Function for graceful shutdown
+ *              
+ * @param   :   none
+ *
+ * @return  :   void
+ * 
+*/
 void graceful_shutdown(void)
 {
 	syslog(LOG_INFO, "Executing Graceful Shutdown procedure\n");
 
 	struct slisthead *head_cleanup = (struct slisthead*) (&head);
-	//head_cleanup = (struct slisthead*) arg;
-//slist_data_t *head_cleanup = arg;
 	slist_data_t *iterator_node = NULL;
 
-        //struct node *temp_thread = NULL;
 	SLIST_FOREACH(iterator_node, head_cleanup, entries)
 	{
+		// Just in case anything was not cleaned by the cleanup thread
 		if(iterator_node->thread_param.thread_complete == true)
 		{
 			/*
 				* 	Thread has completed its execution.
-				*	Join the thread to release its resources
+				*	Kill the thread
 				*	Remove the thread from the Linked List and free the node
 			*/
 
-			// Client shutdown after it exited. Hence no need to do this here
 			shutdown(iterator_node->thread_param.client_sock_fd, SHUT_RDWR);
-			// syslog(LOG_INFO, "Closed connection1 from %s\n", iterator_node->thread_param.ip_v4);
 
-
-			// Join the thread to free up resources
+			// Kill the thread
 			int ret = -1;
 			ret = pthread_kill(iterator_node->thread_param.thread, SIGKILL);
 			if(ret != 0)
 			{
 				syslog(LOG_ERR, "ERROR: pthread_kill() : %s\n", strerror(ret));
-				//syslog(LOG_ERR, "pthread_join failed with error: %s", strerror(ret));
 				exit(EXIT_FAILURE);
 			}
 
@@ -222,18 +158,24 @@ void graceful_shutdown(void)
 		}
 	}
 
+	// For errors 
+	int status;
 
-	// Shutdown the sockeyt
+    status = pthread_kill(cleanup_thread, SIGKILL);
+	if(status != 0)
+	{
+		syslog(LOG_ERR, "ERROR: pthread_kill() : %s\n", strerror(status));
+		exit(EXIT_FAILURE);
+	}
+
+	// Shutdown the socket
 	shutdown(sockfd, SHUT_RDWR);
 	close(sockfd);
-
-    // pthread_kill(cleanup_handler, SIGKILL);
-    // pthread_kill(socket_handler, SIGKILL);
 
 	shutdown(clientfd, SHUT_RDWR);
 	close(clientfd);
 
-	int status;
+	// Destroy the mutex
 	status = pthread_mutex_destroy(&mutex_lock);
 	if(status != 0)
 	{
@@ -241,6 +183,7 @@ void graceful_shutdown(void)
 		exit(EXIT_FAILURE);
 	}
 
+	// Delete the file
 	status = unlink(filepath);
 	if(status != 0)
 	{
@@ -258,15 +201,15 @@ void graceful_shutdown(void)
 	}
 	else
 	{
-		// If file existed, delete it before starting the application
+		// Delete the file before exitting the application
 		syslog(LOG_DEBUG, "Deleting file %s\n", filepath);
 	}
 
 	closelog();
-	exit(EXIT_SUCCESS);
-	//printf("Here end of main\n");
+	//exit(EXIT_SUCCESS);
 
 }
+
 /**
  * @brief   :   Main entry point to the application
  *              
@@ -293,12 +236,10 @@ int main(int argc, char *argv[])
 
 	// Linked List Node
 	slist_data_t *datap = NULL;
-	// slist_data_t *temp = NULL;
-	// int p;
-	// SLIST_HEAD(slisthead, slist_data_s) head;
 
 	SLIST_INIT(&head);
 
+	// Initialize the mutex
 	status = pthread_mutex_init(&mutex_lock, NULL);
 	if(status != 0)
 	{
@@ -306,6 +247,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	// Delete the file in case it exists
 	status = unlink(filepath);
 	if(status != 0)
 	{
@@ -316,7 +258,7 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			//Error
+			// Error
 			syslog(LOG_ERR, "ERROR: unlink() : %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
 		}
@@ -352,9 +294,7 @@ int main(int argc, char *argv[])
 	status = getaddrinfo(NULL, PORT, &hints, &result);
 	if(status != 0)
 	{
-		//syslog(LOG_ERR, "ERROR: getaddrinfo()\n");
 		syslog(LOG_ERR, "ERROR: getaddrinfo() : %s\n", gai_strerror(status));
-		
 		exit(EXIT_FAILURE);
 	}
 
@@ -371,14 +311,12 @@ int main(int argc, char *argv[])
 		if (sockfd == -1)
 		{
 			/* socket() failed */
-			//syslog(LOG_ERR, "ERROR: socket()\n");
 			syslog(LOG_ERR, "ERROR: socket() : %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
 		}
 		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
     	{
 			syslog(LOG_ERR, "ERROR: socketopt() : %s\n", strerror(errno));
-        	//syslog(LOG_ERR, "ERROR: socketopt()\n");
         	exit(EXIT_FAILURE);
     	}
 		   
@@ -388,7 +326,7 @@ int main(int argc, char *argv[])
 			syslog(LOG_DEBUG, "Successfully Bound to socket\n");
 			break;                  
 		}
-		   
+	
 		syslog(LOG_DEBUG, "FAILED: bind()\n");
 		close(sockfd);
 	}
@@ -400,7 +338,6 @@ int main(int argc, char *argv[])
 		/* No address succeeded */
 		// Socket is already closed so just exit
 	   	syslog(LOG_ERR, "ERROR: bind() - No address succeeded\n");
-		//syslog(LOG_ERR, "ERROR: daemon() : %s\n", strerror(errno));
 	   	exit(EXIT_FAILURE);
 	}
 
@@ -411,7 +348,6 @@ int main(int argc, char *argv[])
 		if(status == -1)
 		{
 			// daemon() failed
-			//syslog(LOG_ERR, "ERROR: daemon()\n");
 			syslog(LOG_ERR, "ERROR: daemon() : %s\n", strerror(errno));
 			close(sockfd);
 			exit(EXIT_FAILURE);
@@ -424,22 +360,21 @@ int main(int argc, char *argv[])
 	if(status == -1)
 	{
 		// listen() failed
-		//syslog(LOG_ERR, "ERROR: listen()\n");
 		syslog(LOG_ERR, "ERROR: listen() : %s\n", strerror(errno));
 		close(sockfd);
 		exit(EXIT_FAILURE);
 	}
 	syslog(LOG_DEBUG, "Listen Passed\n");
 	
-	pthread_t thread;
-    status = pthread_create(&thread, NULL, cleanup_handler, &head);
+	// pthread_t cleanup_thread;
+    status = pthread_create(&cleanup_thread, NULL, cleanup_handler, &head);
     if (status)
     {
         syslog(LOG_ERR, "ERROR: pthread_create() : %s\n", strerror(status));
         exit(EXIT_FAILURE);
     }
 
-	//signal(SIGALRM, time_handler);
+	// Register SIGALRM
 	if (signal(SIGALRM, time_handler) == SIG_ERR)
 	{
 		syslog(LOG_ERR, "ERROR: Could not register SIGALRM handler\n");
@@ -452,19 +387,22 @@ int main(int argc, char *argv[])
 	timer_duration.it_value.tv_usec = 0;
 	timer_duration.it_interval.tv_sec = 10;
 	timer_duration.it_interval.tv_usec = 0;
-    	
+
+	// Set the timer	
 	status = setitimer(ITIMER_REAL, &timer_duration, NULL);
 	if(status != 0)
 	{
 		// Error 
-		//syslog(LOG_ERR, "ERROR: setitimer() fail");
 		syslog(LOG_ERR, "ERROR: setitimer() : %s\n", strerror(errno));
+		close(sockfd);
 		exit(EXIT_FAILURE);
 	}
 
+	// Setup for poll()
 	short events = POLL_IN;
 	short revents = 0;
 	struct pollfd pfd = {sockfd, events, revents};
+
 	while(1)
 	{
 
@@ -472,34 +410,37 @@ int main(int argc, char *argv[])
 		struct sockaddr client_addr;
 		sock_addr_size = sizeof(struct sockaddr);
 
+		// Poll will block for time = POLL_TIMEOUT
 		status = poll(&pfd, NO_OF_FDS_FOR_POLL, POLL_TIMEOUT);
 		if(status < 0)
 		{
+			// Can be due to a signal interrupting
 			if(application_running == false || alarm_triggered == true)
 			{
+				// This is not an error just a signal interrupt
 				alarm_triggered = false;
 				status = 0;
 			}
 			else
 			{
 				syslog(LOG_ERR, "ERROR: poll() : %s\n", strerror(errno));
+				graceful_shutdown();
 				exit(EXIT_FAILURE);
 			}
 		}
-		//printf("statrtus = %d\n", status);
 		if(status == 0)
 		{
 			if(application_running == false)
 			{
-				printf("Go to graceful shutdown\n");
+				// Caught SIGTERM or SIGINT
 				graceful_shutdown();
 				exit(EXIT_SUCCESS);
-			}
-			
+			}	
 		}
-		
 		else
 		{
+			// Poll has returned a non negative value which means data is ready on sockfd
+
 			// Accept the connection
 			syslog(LOG_INFO, "Waiting for connections\n");
 			clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &sock_addr_size);
@@ -507,12 +448,8 @@ int main(int argc, char *argv[])
 			if(clientfd == -1 && application_running) 
 			{
 				// accept() failed
-				//syslog(LOG_ERR, "ERROR: accept() %s\n", strerror(clientfd));
-				//syslog(LOG_ERR, "ERROR: accept() \n");
 				syslog(LOG_ERR, "ERROR: accept() : %s\n", strerror(errno));
-				//perror("accept %s\n", strerror(clientfd));
 				shutdown(clientfd, SHUT_RDWR);
-				//close(sockfd);
 				exit(EXIT_FAILURE);
 			}
 			
@@ -538,7 +475,6 @@ int main(int argc, char *argv[])
 			datap->thread_param.client_sock_fd = clientfd;
 			datap->thread_param.thread_complete = false;
 			datap->thread_param.ip_v4 = ipv4;
-			//datap->thread_param.mutex = &mutex_lock;
 
 			status = pthread_create(&(datap->thread_param.thread), NULL, socket_handler, &(datap->thread_param));
 			if (status)
@@ -548,40 +484,28 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		// SLIST_FOREACH(temp, &head, entries)
-		// {
-		// 	if(temp->thread_param.thread_complete == true)
-		// 	{
-				
-		// 		pthread_join(temp->thread_param.thread, NULL);
-		// 		// datap = SLIST_FIRST(&head);
-		// 		// SLIST_REMOVE_HEAD(&head, entries);
-		// 		SLIST_REMOVE(&head, temp, slist_data_s, entries);
-		// 		printf("%d\n",p++);
-		// 		free(temp);
-		// 	}
-		// }
-		// printf("All thread exited!\n");
-
-
-		
 	}
-	close(sockfd);
+	graceful_shutdown();
 
 	return 0;
 }
+
+/**
+ * @brief   :   Cleanup Handler function
+ *              
+ * @param   :   signo - Signal received
+ *
+ * @return  :   void *
+ * 
+*/
 void* cleanup_handler(void* arg)
 {
 
-	//SLIST_HEAD(slisthead, slist_data_s) head_cleanup = arg;
-// head_cleanup = (slist_data_t*)arg;
 	struct slisthead *head_cleanup = (struct slisthead*) arg;
-	//head_cleanup = (struct slisthead*) arg;
-//slist_data_t *head_cleanup = arg;
 	slist_data_t *iterator_node = NULL;
+
     while (1)
     {
-        //struct node *temp_thread = NULL;
         SLIST_FOREACH(iterator_node, head_cleanup, entries)
         {
             if(iterator_node->thread_param.thread_complete == true)
@@ -596,14 +520,13 @@ void* cleanup_handler(void* arg)
             	// shutdown(iterator_node->thread_param.client_sock_fd, SHUT_RDWR);
 				// syslog(LOG_INFO, "Closed connection1 from %s\n", iterator_node->thread_param.ip_v4);
 
-
                 // Join the thread to free up resources
                 int ret = -1;
                 ret = pthread_join(iterator_node->thread_param.thread, NULL);
                 if(ret != 0)
                 {
 					syslog(LOG_ERR, "ERROR: pthread_join() : %s\n", strerror(ret));
-                    //syslog(LOG_ERR, "pthread_join failed with error: %s", strerror(ret));
+					graceful_shutdown();
                     exit(EXIT_FAILURE);
                 }
 
@@ -622,12 +545,21 @@ void* cleanup_handler(void* arg)
     return NULL;
 
 }
+
+/**
+ * @brief   :   Socket Handler function
+ *              
+ * @param   :   signo - Signal received
+ *
+ * @return  :   void
+ * 
+*/
 void* socket_handler(void* thread_param)
 {
 	char recv_buffer[RECV_SIZE] = {0};
 	int total_data_size = 0;
 	ssize_t nread = 0;
-	//char ipv4[INET6_ADDRSTRLEN]; // space to hold the IPv4 string
+
 	thread_params_t *params = (thread_params_t*)thread_param;
 
 	// For checking return values for errors
@@ -638,6 +570,7 @@ void* socket_handler(void* thread_param)
 	if (storage_array == NULL)
 	{
 		syslog(LOG_ERR, "ERROR: malloc()\n");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	} 
 	memset(storage_array, 0, RECV_SIZE);
@@ -648,7 +581,7 @@ void* socket_handler(void* thread_param)
 	// if we want to use memcpy instead of strncpy
 	//int memcpy_counter = 0;
 	//char c;
-	//printf("clientfd = %d\n", params->client_sock_fd);
+
 	while(enter_received == false)
 	{
 		nread = 0;
@@ -657,8 +590,8 @@ void* socket_handler(void* thread_param)
 		if( nread == -1)
 		{
 			syslog(LOG_ERR, "ERROR: recv() %s \n", strerror(errno));
-			//perror("RECV");
 			free(storage_array);
+			graceful_shutdown();
 			exit(EXIT_FAILURE);
 		}
 		else
@@ -693,6 +626,7 @@ void* socket_handler(void* thread_param)
 			if (newpointer == NULL)
 			{
 				syslog(LOG_ERR, "ERROR: realloc()\n");
+				graceful_shutdown();
 				exit(EXIT_FAILURE);
 			} 
 			else
@@ -723,65 +657,45 @@ void* socket_handler(void* thread_param)
 	// printf("Packet Size =  %d\n", packet_size);
 	// printf("total_data_size =  %d\n", total_data_size);
 	// printf("Storage array = \n%s", storage_array);
-		
-		
-		
-	/* Write to file */
+			
+	// Locking the mutex around the file operations
 	status = pthread_mutex_lock(&mutex_lock);
 	if(status != 0)
 	{
 		syslog(LOG_ERR, "ERROR: mutex_lock() : %s \n", strerror(status));
-		//syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
 
 	int fd = open(filepath, O_CREAT|O_RDWR|O_APPEND, 0644);
-	//int fd = open(filepath, O_WRONLY | O_APPEND);
 	if(fd == -1)
 	{
 		syslog(LOG_ERR, "ERROR: open() : %s \n", strerror(errno));
-		//syslog(LOG_ERR, "ERROR: open()\n");
 		free(storage_array);
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
-
-	//pthread_mutex_lock(params->mutex);
+	// Write to file
 	int bytes_wriiten = write(fd, storage_array, packet_size);
 	if( bytes_wriiten == -1)
 	{
 		syslog(LOG_ERR, "ERROR: write() : %s \n", strerror(errno));
-		//syslog(LOG_ERR, "ERROR: read()\n");
-		
+		graceful_shutdown();
+		exit(EXIT_FAILURE);
 	}
 
-	//fdatasync(fd);
-	
-	//pthread_mutex_unlock(params->mutex);
-	//saclose(fd);
-	// Open the file to read
-	//fd = open(filepath, O_RDONLY);
-	// if(fd < 0)
-	// {
-	// 	syslog(LOG_ERR, "ERROR: open()\n");
-	// 	free(storage_array);
-	// 	exit(EXIT_FAILURE);
-	// }
 	lseek(fd, 0, SEEK_SET);
 	
 	/* Logic to read one byte from the file and send one byte at a time to client*/
 	
-	//int j = 0;
 	char a;
-	//while(j < total_data_size)
-	//pthread_mutex_lock(params->mutex);
-	// reading doesnt need a lock
 	while((nread = read(fd, &a, 1)) != 0)
 	{
-		//nread = read(fd, &a, 1);
 		if( nread == -1)
 		{
 			syslog(LOG_ERR, "ERROR: read() : %s \n", strerror(errno));
 			free(storage_array);
+			graceful_shutdown();
 			exit(EXIT_FAILURE);
 		}
 
@@ -789,70 +703,29 @@ void* socket_handler(void* thread_param)
 		if(status == -1)
 		{
 			syslog(LOG_ERR, "ERROR: send() : %s \n", strerror(errno));
-			//syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+			graceful_shutdown();
 			exit(EXIT_FAILURE);
 		}
-		//j++;
 	}
 
 	close(fd);
+
 	status = pthread_mutex_unlock(&mutex_lock);
 	if(status != 0)
 	{
 		syslog(LOG_ERR, "ERROR: mutex_unlock() : %s \n", strerror(status));
-		//syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
 
-	/* Logic to read multiple bytes from the file and send multiple bytes at a time to client*/
-	/*		
-	char *line = NULL;
-	size_t len = 0;
-
-	// Convert fd to type FILE* to use the function getline
-	FILE *stream = fdopen(fd, "r");
-
-	while ((nread = getline(&line, &len, stream)) != -1)
-	{
-		//printf("%s", line);
-		send(clientfd, line, nread, 0);
-	}
-	free(line);
-	*/
-	
-	/* Logic to read one line from the file and send one line at a time to client*/
-	/*		
-	memset(recv_buffer, 0, RECV_SIZE);
-	while((nread = read(fd, recv_buffer, RECV_SIZE) != 0))
-	{
-		//bytes = read(fd, recv_buf, BUF_SIZE);
-		if (nread == -1)
-		{
-			syslog(LOG_ERR, "read\n");
-			return -1;
-		}
-		printf("nread = %ld, str = %s", nread, recv_buffer);
-		//printf("Reading %d bytes\n", bytes);
-		if (send(clientfd, &recv_buffer, nread, 0) == -1)
-		{
-			syslog(LOG_ERR, "send\n");
-		}
-	}
-
-        */
 	params->thread_complete = true;
 	
-	// Reverse this order
-
 	// Closing connection here itself. Node will be deleted by cleanup thread
 	syslog(LOG_INFO, "Closed connection from %s\n", params->ip_v4);
 	shutdown(params->client_sock_fd, SHUT_RDWR);
-	//close(params->client_sock_fd);
-	//clientfd = -1;
+
 	free(storage_array);
 	
-	// }
-	//close(sockfd);	
 	return thread_param;
 }
 
@@ -870,9 +743,10 @@ static void time_handler(int sig_num)
 	if(tmp == NULL)
 	{
 		syslog(LOG_ERR, "ERROR: localtime()\n");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
-	// length = strftime(timestamp, sizeof(timestamp), "timestamp: %k:%M:%S- %d.%b.%Y\n", tmp);
+
 	length = strftime(timestamp, sizeof(timestamp), "timestamp: %a, %d %b %Y - %T\n", tmp);
 	if(length == 0)
 	{
@@ -886,14 +760,16 @@ static void time_handler(int sig_num)
 	if(status != 0)
 	{
 		syslog(LOG_ERR, "ERROR: mutex_lock() : %s \n", strerror(status));
-		//syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
 	
 	// Open the file
 	int fd = open(filepath, O_CREAT|O_RDWR|O_APPEND, 0644);
-	if( fd == -1 ){
+	if( fd == -1 )
+	{
 		syslog(LOG_ERR, "ERROR: open() fail");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
 
@@ -902,18 +778,19 @@ static void time_handler(int sig_num)
 	if( bytes_wriiten == -1)
 	{
 		syslog(LOG_ERR, "ERROR: write() : %s \n", strerror(errno));
-		//syslog(LOG_ERR, "ERROR: read()\n");
+		graceful_shutdown();
+		exit(EXIT_FAILURE);
 		
 	}
+	close(fd);
+
 	// Unlock the mutex 
 	pthread_mutex_unlock(&mutex_lock);
 	if(status != 0)
 	{
 		syslog(LOG_ERR, "ERROR: mutex_unlock() : %s \n", strerror(status));
-		//syslog(LOG_ERR, "ERROR: mutex_lock() fail");
+		graceful_shutdown();
 		exit(EXIT_FAILURE);
-	}
-
-	close(fd);
+	}	
 
 } 
