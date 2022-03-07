@@ -6,7 +6,7 @@ Run 'echo “hello_world” > /dev/faulty' from the command line of your running
 
 ## Kernel Output  
 
-'''  
+``` 
 Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000  
 Mem abort info:  
   ESR = 0x96000046  
@@ -52,47 +52,48 @@ Call trace:
  el0_sync+0x174/0x180  
 Code: d2800001 d2800000 d503233f d50323bf (b900003f)   
 ---[ end trace 06d76f8526f855a9 ]---  
-'''  
+```
 
 ## Analysis of the kernel output  
 
 An oops message is usually the outcome of deferencing a NULL pointer. All addresses used by the processor are virtual addresses and  
 mapped to the physical addresses through a complex structure of page table. The paging mechanism fails to point to do this mapping when we  
 dereference an invalid pointer (NULL in this case). The error has occured in the faulty_write function which can be found in misc-modules/faulty.c  
-'''  
+
+``` 
 ssize_t faulty_write (struct file *filp, const char __user *buf, size_t count, loff_t *pos)  
 {  
 	/* make a simple fault by dereferencing a NULL pointer */  
 	*(int *)0 = 0;  
 	return 0;  
 }  
-'''  
+```
 The oops message displays the processor status at the time of the fault including contents of CPU registers. After displaying the message,  
 the process is then killed.  
 
-The first line 'Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000' tells us that we were trying to deference  
+The first line `Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000` tells us that we were trying to deference  
 a NULL pointer which is not permitted.  
 
-'Internal error: Oops: 96000046 [#1] SMP'  
+`Internal error: Oops: 96000046 [#1] SMP`  
 This is the error code value and each bit has its own significance. [#1] means that the oops error occured once  
 
-'CPU: 0' indicates the CPU on which the error occured  
-'Tainted: G' indicates that a proprietary module was loaded  
+`CPU: 0` indicates the CPU on which the error occured  
+`Tainted: G` indicates that a proprietary module was loaded  
 
-'''  
+```
 pc : faulty_write+0x10/0x20 [faulty]  
 lr : vfs_write+0xc0/0x290  
 sp : ffffffc010c53db0  
-'''  
+```
 The above lines show us the values of the CPU registers including program counter, link register and stack pointer. The values of other general purpose  
 registers can be seen below that.  
-'pc : faulty_write+0x10/0x20 [faulty]'  
+`pc : faulty_write+0x10/0x20 [faulty]`  
 From the program counter we can see that the error occured in the faulty_write function inside the faulty.c file. 0x10 is the offset from faulty_write  
 and 0x20 is the length.  
 
 The call trace shows the list of functions being called just before the oops occured.  
 
-'Code: d2800001 d2800000 d503233f d50323bf (b900003f)' is the hexdump of the section of machine code that was being run at the time the oops occured  
+`Code: d2800001 d2800000 d503233f d50323bf (b900003f)` is the hexdump of the section of machine code that was being run at the time the oops occured  
 
 ## References
 
