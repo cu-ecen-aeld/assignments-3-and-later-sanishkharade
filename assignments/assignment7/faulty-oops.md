@@ -2,7 +2,7 @@
 
 ## How did the error occur  
 
-Run `echo “hello_world” > /dev/faulty` from the command line of your running qemu image  
+Run `echo “hello_world” > /dev/faulty` from the command line of your running qemu image.  
 
 ## Kernel Output  
 
