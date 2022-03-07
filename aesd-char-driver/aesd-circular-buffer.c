@@ -36,12 +36,17 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 	uint8_t index;
 
 	struct aesd_buffer_entry *entry;
+
+	// Because the buffer starts from 0 we actually need the (char_offset+1)th element
 	char_offset++;
+	
+	// Start at the out pointer
 	index = buffer->out_offs;
 	for (int count = 0; count < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; count++)
 	{
 		index = (buffer->out_offs + count) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
 
+		// String at current index
 		entry = &((buffer)->entry[index]);
 		if(entry == NULL)
 		{
@@ -57,11 +62,13 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 			}
 			else
 			{
+				// Update char_offset and move to the next iteration
 				char_offset -= entry->size;
 			}
 		}
 	}
 
+	// The char_offset doesn't exist
 	return NULL;
 }
 
@@ -78,20 +85,19 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     * TODO: implement per description 
     */
     
-	// Check if buffer is full
-
-
-	// add entry to correct location
+	// No matter the status of the buffer (full or not) we have to overwrite at the position in_offs
 	buffer->entry[buffer->in_offs] = *add_entry;
 
-   	// Modify read and write pointers accordingly
+   	// Increment the in_offs and wrap around if reached the end
 	buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+	// Only if the buffer is full, increment the in_offs and wrap around if reached the end 
 	if(buffer->full ==  true)
 	{
 		buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
 	}
 
-   	// Update full status if buffer is full
+   	// Check if the buffer is full after the above update
 	if(buffer->in_offs == buffer->out_offs)
 	{
 		buffer->full = true;
