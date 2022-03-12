@@ -27,6 +27,10 @@ struct aesd_dev
 {
 	/**
 	 * TODO: Add structure(s) and locks needed to complete assignment requirements
+	 * 
+	 * 	Add circular buffer structure / code
+	 * 	working (current) aesd_buffer_entry value (for writes before \n)
+	 *  locking primitive
 	 */
 	struct cdev cdev;	  /* Char device structure		*/
 };

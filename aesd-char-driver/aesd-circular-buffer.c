@@ -78,12 +78,21 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 * new start location.
 * Any necessary locking must be handled by the caller
 * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
+* 
+* Assignment 8
+* TODO: Since memory needs to be managed by the caller, in case of an overwrite, we need to return the pointer of the 
+* 		overwritten buffer so that the caller can free it
+*
+* @return :	NULL 	- if no entry was overwritten (ie buffer was not full)
+*			char*	- pointer to the buffer which was overwritten (ie buffer was full)
+* 
+* @note :	See lecture video for a possible implementation
+*			Will need to modify the write_circular_buffer_packet function in to test this functionality
+			Location - ../assignment-autotest/test/assignment7/Test_circular_buffer.c
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    /**
-    * TODO: implement per description 
-    */
+	// could be used by multiple drivers hence cannot free here
     
 	// No matter the status of the buffer (full or not) we have to overwrite at the position in_offs
 	buffer->entry[buffer->in_offs] = *add_entry;
