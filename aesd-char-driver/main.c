@@ -41,6 +41,15 @@ int aesd_open(struct inode *inode, struct file *filp)
 	 * Now filep has the private_data member setup to aesd_dev and can be used in other functions
 	 */
 
+	/*
+	 *	To get the pointer of aesd_dev structure we need to use container_of MACRO
+	 *	Ref LDD3 pg 58 
+	*/
+	struct aesd_dev *dev;
+
+	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+
+	filp->private_data = dev;
 	
 	return 0;
 
@@ -48,7 +57,7 @@ int aesd_open(struct inode *inode, struct file *filp)
 
 int aesd_release(struct inode *inode, struct file *filp)
 {
-	PDEBUG("release");
+	PDEBUG("release2");
 	/**
 	 * TODO: handle release
 	 */
@@ -74,8 +83,10 @@ int aesd_release(struct inode *inode, struct file *filp)
 ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
+	PDEBUG("Start of aesd_read function\n");
 	ssize_t retval = 0;
-	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
+	//PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
+	PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
 	/**
 	 * TODO: handle read
 	 * filep has the private_data member setup to aesd_dev by the open function
@@ -84,7 +95,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	 * Since buf is a user space buffer we need to use copy_to_user to access it
 	 */
 
-
+	PDEBUG("End of aesd_read function\n");
 	return retval;
 }
 /**
@@ -107,8 +118,11 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t retval = -ENOMEM;
-	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
+	PDEBUG("Start of aesd_write function\n");
+	//ssize_t retval = -ENOMEM;
+	PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
+	//ssize_t retval =  2;
+	//PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	/**
 	 * TODO: handle write
 	 */
@@ -124,8 +138,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	// src and dest
 // if found put ot a weite 
 
-
-	return retval;
+	PDEBUG("End of aesd_write function\n");
+	return 2;
+	//return 2;	
 }
 struct file_operations aesd_fops = {
 	.owner =    THIS_MODULE,
@@ -155,10 +170,19 @@ int aesd_init_module(void)
 {
 	dev_t dev = 0;
 	int result;
+	PDEBUG("Start of aesd_init_module function\n");
+
+	/*
+	 *	int alloc_chrdev_region(dev_t * dev, unsigned baseminor, unsigned count, const char * name);
+	 * 	Dynamic allocation of major number
+	*/
 	result = alloc_chrdev_region(&dev, aesd_minor, 1,
 			"aesdchar");
+
+	// Get major number from dev
 	aesd_major = MAJOR(dev);
-	if (result < 0) {
+	if (result < 0)
+	{
 		printk(KERN_WARNING "Can't get major %d\n", aesd_major);
 		return result;
 	}
@@ -169,18 +193,21 @@ int aesd_init_module(void)
 	 * 
 	 * Initialize locking primitive
 	 */
+	aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
 
 	result = aesd_setup_cdev(&aesd_device);
-
 	if( result ) {
 		unregister_chrdev_region(dev, 1);
 	}
+
+	PDEBUG("End of aesd_init_module function\n");
 	return result;
 
 }
 
 void aesd_cleanup_module(void)
 {
+	// Get the dev number from major and minor numbers
 	dev_t devno = MKDEV(aesd_major, aesd_minor);
 
 	cdev_del(&aesd_device.cdev);
@@ -188,7 +215,7 @@ void aesd_cleanup_module(void)
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 * 
-	 * free memory
+	 * free memory associated with filp->private_data
 	 * Uninitialize everything
 	 * 
 	 */

@@ -14,7 +14,7 @@
 #ifdef AESD_DEBUG
 #  ifdef __KERNEL__
      /* This one if debugging is on, and kernel space */
-#    define PDEBUG(fmt, args...) printk( KERN_DEBUG "aesdchar: " fmt, ## args)
+#    define PDEBUG(fmt, args...) printk( KERN_ALERT "aesdchar: " fmt, ## args)
 #  else
      /* This one for user space */
 #    define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
@@ -22,6 +22,8 @@
 #else
 #  define PDEBUG(fmt, args...) /* not debugging: nothing */
 #endif
+
+#include "aesd-circular-buffer.h"
 
 struct aesd_dev
 {
@@ -32,6 +34,10 @@ struct aesd_dev
 	 * 	working (current) aesd_buffer_entry value (for writes before \n)
 	 *  locking primitive
 	 */
+	
+	struct aesd_circular_buffer aesd_cbuf;
+	struct aesd_buffer_entry aesd_cb_entry;
+
 	struct cdev cdev;	  /* Char device structure		*/
 };
 
