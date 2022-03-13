@@ -91,10 +91,12 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 *			Will need to modify the write_circular_buffer_packet function in to test this functionality
 			Location - ../assignment-autotest/test/assignment7/Test_circular_buffer.c
 */
-void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
+const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
 	// could be used by multiple drivers hence cannot free here
-    
+    char *ret_entry_buf;
+	ret_entry_buf = buffer->entry[buffer->in_offs].buffptr;
+
 	// No matter the status of the buffer (full or not) we have to overwrite at the position in_offs
 	buffer->entry[buffer->in_offs] = *add_entry;
 
@@ -106,7 +108,11 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
 	{
 		buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
 	}
-
+	else
+	{
+		ret_entry_buf = NULL;
+	}
+	buffer->empty = false;
    	// Check if the buffer is full after the above update
 	if(buffer->in_offs == buffer->out_offs)
 	{
@@ -116,6 +122,7 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
 	{
 		buffer->full = false;
 	}
+	return ret_entry_buf;
 
 }
 
@@ -125,4 +132,5 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
 void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
+	buffer->empty = true;
 }
