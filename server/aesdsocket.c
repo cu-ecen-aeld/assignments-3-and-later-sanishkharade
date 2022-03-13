@@ -48,7 +48,14 @@ bool alarm_triggered = false;
 
 int sockfd;
 int clientfd;
-char filepath[50] = "/var/tmp/aesdsocketdata";
+
+#define USE_AESD_CHAR_DEVICE 1
+
+#if (USE_AESD_CHAR_DEVICE == 1)
+	char filepath[50] = "/dev/aesdchar";
+#else
+	char filepath[50] = "/var/tmp/aesdsocketdata";
+#endif
 
 void* socket_handler(void* thread_param);
 static void time_handler(int sig_num);
@@ -182,7 +189,7 @@ void graceful_shutdown(void)
 		syslog(LOG_ERR, "ERROR: pthread_mutex_destroy() : %s\n", strerror(status));	
 		exit(EXIT_FAILURE);
 	}
-
+#if (USE_AESD_CHAR_DEVICE == 0)
 	// Delete the file
 	status = unlink(filepath);
 	if(status != 0)
@@ -204,7 +211,7 @@ void graceful_shutdown(void)
 		// Delete the file before exitting the application
 		syslog(LOG_DEBUG, "Deleting file %s\n", filepath);
 	}
-
+#endif
 	closelog();
 	//exit(EXIT_SUCCESS);
 
@@ -246,7 +253,7 @@ int main(int argc, char *argv[])
 		syslog(LOG_ERR, "ERROR: pthread_mutex_init() : %s\n", strerror(status));	
 		exit(EXIT_FAILURE);
 	}
-
+#if (USE_AESD_CHAR_DEVICE == 0)
 	// Delete the file in case it exists
 	status = unlink(filepath);
 	if(status != 0)
@@ -268,7 +275,7 @@ int main(int argc, char *argv[])
 		// If file existed, delete it before starting the application
 		syslog(LOG_DEBUG, "Deleting file %s\n", filepath);
 	}
-
+#endif
 	/*
 	* Register signal_handler as our signal handler
 	* for SIGINT and SIGTERM.
@@ -343,7 +350,7 @@ int main(int argc, char *argv[])
 
     if ((argc >= 2) && (strcmp("-d", argv[1]) == 0))
     {
-    	syslog(LOG_DEBUG, "Running aesdsocket as a Daemon\n");
+    	syslog(LOG_DEBUG, "Running aesdsocket as a Daemon1\n");
 		status = daemon(0,0);
 		if(status == -1)
 		{
@@ -373,6 +380,7 @@ int main(int argc, char *argv[])
         syslog(LOG_ERR, "ERROR: pthread_create() : %s\n", strerror(status));
         exit(EXIT_FAILURE);
     }
+#if (USE_AESD_CHAR_DEVICE == 0)
 
 	// Register SIGALRM
 	if (signal(SIGALRM, time_handler) == SIG_ERR)
@@ -398,6 +406,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+#endif
 	// Setup for poll()
 	short events = POLL_IN;
 	short revents = 0;
@@ -683,11 +692,21 @@ void* socket_handler(void* thread_param)
 		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
-
+#if (USE_AESD_CHAR_DEVICE == 0)
 	lseek(fd, 0, SEEK_SET);
-	
+#else 
+	close(fd);
+	fd = open(filepath, O_RDWR);
+	if(fd == -1)
+	{
+		syslog(LOG_ERR, "ERROR: open() : %s \n", strerror(errno));
+		free(storage_array);
+		graceful_shutdown();
+		exit(EXIT_FAILURE);
+	}
+#endif
 	/* Logic to read one byte from the file and send one byte at a time to client*/
-	
+#if (USE_AESD_CHAR_DEVICE == 0)	
 	char a;
 	while((nread = read(fd, &a, 1)) != 0)
 	{
@@ -707,6 +726,28 @@ void* socket_handler(void* thread_param)
 			exit(EXIT_FAILURE);
 		}
 	}
+#else
+	int read_size = 64;
+	char a[read_size];
+	while((nread = read(fd, a, read_size)) != 0)
+	{
+		if( nread == -1)
+		{
+			syslog(LOG_ERR, "ERROR: read() : %s \n", strerror(errno));
+			free(storage_array);
+			graceful_shutdown();
+			exit(EXIT_FAILURE);
+		}
+
+		status = send(params->client_sock_fd, a, nread, 0);
+		if(status == -1)
+		{
+			syslog(LOG_ERR, "ERROR: send() : %s \n", strerror(errno));
+			graceful_shutdown();
+			exit(EXIT_FAILURE);
+		}
+	}
+#endif
 
 	close(fd);
 
@@ -728,7 +769,7 @@ void* socket_handler(void* thread_param)
 	
 	return thread_param;
 }
-
+#if (USE_AESD_CHAR_DEVICE == 0)
 static void time_handler(int sig_num)
 {
 	alarm_triggered = true;
@@ -794,3 +835,4 @@ static void time_handler(int sig_num)
 	}	
 
 } 
+#endif

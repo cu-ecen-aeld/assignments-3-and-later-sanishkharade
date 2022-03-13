@@ -69,7 +69,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 		}
 	}
 
-	// The char_offset doesn't exist
+	// The char_offset doesn't exist. When fpos > size of all 10 buffers ie all have been read
 	return NULL;
 }
 

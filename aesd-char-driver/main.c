@@ -39,6 +39,26 @@ MODULE_LICENSE("Dual BSD/GPL");
 struct aesd_dev aesd_device;
 
 char *pointer;
+void debug_print_string(char *s, size_t n);
+
+// To print strings without \0 at the end
+void debug_print_string(char *s, size_t n)
+{	
+	if(s == NULL)
+	{
+		printk(KERN_CONT "(null)\n");
+	}
+	else
+	{
+		int i = 0;
+		for(i = 0; i < n; i++)
+		{
+			printk(KERN_CONT "%c", s[i]);
+		}
+	}
+
+	//printk(KERN_CONT "\n");
+}
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
@@ -114,16 +134,25 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	// 	PDEBUG("Buffer is empty\n");
 	// 	return 0;
 	// }
-	if(dev->aesd_cbuf.empty == true )
-	{
-		// buffer is empty
-		PDEBUG("Buffer is empty\n");
-		return 0;
-	}
+	// if(dev->aesd_cbuf.empty == true )
+	// {
+	// 	// buffer is empty
+	// 	PDEBUG("Buffer is empty\n");
+	// 	return 0;
+	// }
+	// Since we are incrementing fpos, this will only return 10 entries and then return NULL by coming out of the loop
 	read_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_cbuf), *f_pos, &read_offset);
 	if(read_entry != NULL)
 	{
-		PDEBUG("entry = %s, read_offset = %zu\n", read_entry->buffptr, read_offset);
+		//PDEBUG("entry = %s, read_offset = %zu\n", read_entry->buffptr, read_offset);
+		PDEBUG("Entry = ");
+		debug_print_string(read_entry->buffptr, read_entry->size);
+		PDEBUG("Read_offset = %zu\n", read_offset);
+
+	}
+	else
+	{
+		return 0;
 	}
 	size_t rem_bytes = read_entry->size - read_offset;
 	if(count > rem_bytes)
@@ -134,6 +163,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	{
 		retval = count;
 	}
+	// free memory in read??????????????????????????????????????
 	size_t status = __copy_to_user(buf, (void*)(read_entry->buffptr + read_offset), retval);
 	if(status != 0)
 	{
@@ -143,16 +173,16 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	{
 		PDEBUG("Copied %ld bytes to user\n", retval);
 	}
-	dev->aesd_cbuf.out_offs = (dev->aesd_cbuf.out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-	if(dev->aesd_cbuf.out_offs == dev->aesd_cbuf.in_offs)
-	{
-		dev->aesd_cbuf.empty = true;
-	}
-	else
-	{
-		dev->aesd_cbuf.empty = false;
-	}
-	//*f_pos += retval;
+	// dev->aesd_cbuf.out_offs = (dev->aesd_cbuf.out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+	// if(dev->aesd_cbuf.out_offs == dev->aesd_cbuf.in_offs)
+	// {
+	// 	dev->aesd_cbuf.empty = true;
+	// }
+	// else
+	// {
+	// 	dev->aesd_cbuf.empty = false;
+	// }
+	*f_pos += retval;
 	/**
 	 * TODO: handle read
 	 * filep has the private_data member setup to aesd_dev by the open function
@@ -200,7 +230,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	total_count += count;
 	if(write_complete)
 	{
-		dev->aesd_cb_entry.buffptr = (char*)kmalloc(count+1, GFP_KERNEL);
+		dev->aesd_cb_entry.buffptr = (char*)kmalloc(count, GFP_KERNEL);
 		if(dev->aesd_cb_entry.buffptr == NULL)
 		{
 			// handle error
@@ -259,7 +289,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		}
 		
 	}
-	memcpy(dev->aesd_cb_entry.buffptr + total_count, "\0", 1);
+	//memcpy(dev->aesd_cb_entry.buffptr + total_count, "\0", 1);
 	if(memchr(dev->aesd_cb_entry.buffptr, '\n', total_count) != NULL)
 	{
 		//pointer[total_count] = '\0';
@@ -271,6 +301,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		if(overwritten_buf != NULL)
 		{
 			PDEBUG("Freeing : %s\n", overwritten_buf);
+			// PDEBUG("Freeing : ");
+			// debug_print_string(overwritten_buf, dev->aesd_cbuf.entry[j].size);
 			kfree(overwritten_buf);
 		}
 	}
@@ -283,7 +315,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	int j = 0;
 	for(j = 0; j < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; j++)
 	{
-		PDEBUG("entry %d = %s", j, dev->aesd_cbuf.entry[j].buffptr);
+		//PDEBUG("entry %d = %s", j, dev->aesd_cbuf.entry[j].buffptr);
+		PDEBUG("Entry %d = ", j);
+		debug_print_string(dev->aesd_cbuf.entry[j].buffptr, dev->aesd_cbuf.entry[j].size);
 	}
 
 
@@ -384,6 +418,9 @@ int aesd_init_module(void)
 	 */
 	aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
 
+	/**
+	 * TODO: malloc the entry inside aesd device
+	*/
 	result = aesd_setup_cdev(&aesd_device);
 	if( result ) {
 		unregister_chrdev_region(dev, 1);
