@@ -84,7 +84,7 @@ int aesd_open(struct inode *inode, struct file *filp)
 	return 0;
 
 }
-
+// This function is called whenever a file refereing to this driver is released
 int aesd_release(struct inode *inode, struct file *filp)
 {
 	PDEBUG("release\n\n");
@@ -98,8 +98,8 @@ int aesd_release(struct inode *inode, struct file *filp)
  *
  *	@param	
  *			: count		- number of bytes to read
-						- OR max number of bytes to write to buf
- *			: buf		- buffer from user space that we are going to fill
+						- (OR) max number of bytes to write to buf
+ *			: buf		- buffer from user space that this function will fill
  *			: f_pos 	- pointer to the read offset
  *						  references a specific byte (char_offset) of the circular buffer linear content
  * 						  See aesd_circular_buffer_find_entry_offset_for_fpos for char_offset
@@ -107,7 +107,7 @@ int aesd_release(struct inode *inode, struct file *filp)
  *  @return : ssize_t	- number of bytes read
  * 
  * 	@note 	: Do appropriate locking in this function
- * 			  See partial read rule
+ * 			  This function is using the partial read rule
 
 */
 ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
@@ -115,13 +115,17 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 {
 	PDEBUG("Start of aesd_read function\n");
 	ssize_t retval = 0;
-	//PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
+
 	PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
 
 	struct aesd_buffer_entry *read_entry = NULL;
 	ssize_t read_offset = 0;
+	
+	// For accessing the circular buffer
 	struct aesd_dev *dev;
 	dev = (struct aesd_dev *) filp->private_data;
+
+
 	// offset
 	// when count > number of bytes left in current entry, bytes read = size - offset - 1
 	// user should update fpos = fpos + bytes read
@@ -142,6 +146,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	// }
 	// Since we are incrementing fpos, this will only return 10 entries and then return NULL by coming out of the loop
 
+	// Lock the resource
 	mutex_lock_interruptible(&(dev->lock));
 
 	read_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_cbuf), *f_pos, &read_offset);
@@ -232,13 +237,19 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	static uint8_t write_complete = 1;
 
 	total_count += count;
+
+	/**
+	 * 	Check if the previous write was complete (complete if it had a \n character)
+	 * 		If it was then we need to malloc new memory for the current write operation
+	 * 
+	 */
 	mutex_lock_interruptible(&(dev->lock));
 	if(write_complete)
 	{
 		dev->aesd_cb_entry.buffptr = (char*)kmalloc(count, GFP_KERNEL);
 		if(dev->aesd_cb_entry.buffptr == NULL)
 		{
-			// handle error
+			// handle error - use goto
 			PDEBUG("Unable to malloc\n");
 			mutex_unlock(&(dev->lock));
 			return retval;
@@ -412,6 +423,7 @@ int aesd_init_module(void)
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 * 
+	 * Initialize the circular buffer 
 	 * Initialize locking primitive
 	 */
 	aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
@@ -431,6 +443,7 @@ int aesd_init_module(void)
 
 }
 
+// This function is called when the module is unloaded
 void aesd_cleanup_module(void)
 {
 	// Get the dev number from major and minor numbers
@@ -441,14 +454,20 @@ void aesd_cleanup_module(void)
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 * 
-	 * free memory associated with filp->private_data
+	 * Free memory associated the driver
 	 * Uninitialize everything
 	 * 
 	 */
+
 	uint8_t index;
 	struct aesd_buffer_entry *entry;
 	AESD_CIRCULAR_BUFFER_FOREACH(entry, &(aesd_device.aesd_cbuf), index)
   	{
+		/*
+		 *	Only free the entry if it is not NULL
+		 *	It can be NULL when the buffer was filled with entries < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED
+		 *	and the driver was unloaded
+		*/	
 		if(entry->buffptr != NULL)
 		{
 			kfree(entry->buffptr);
