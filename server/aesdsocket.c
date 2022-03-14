@@ -82,9 +82,12 @@ struct slist_data_s
 	thread_params_t thread_param;
 	SLIST_ENTRY(slist_data_s) entries;
 };
+#if (USE_AESD_CHAR_DEVICE == 0)	
 
 // Mutex 
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
+
+#endif
 
 pthread_t cleanup_thread;
 
@@ -182,6 +185,7 @@ void graceful_shutdown(void)
 	shutdown(clientfd, SHUT_RDWR);
 	close(clientfd);
 
+#if (USE_AESD_CHAR_DEVICE == 0)	
 	// Destroy the mutex
 	status = pthread_mutex_destroy(&mutex_lock);
 	if(status != 0)
@@ -189,6 +193,8 @@ void graceful_shutdown(void)
 		syslog(LOG_ERR, "ERROR: pthread_mutex_destroy() : %s\n", strerror(status));	
 		exit(EXIT_FAILURE);
 	}
+#endif
+
 #if (USE_AESD_CHAR_DEVICE == 0)
 	// Delete the file
 	status = unlink(filepath);
@@ -230,7 +236,7 @@ int main(int argc, char *argv[])
 
 	// Open the syslog for logging data
 	// Using LOG_PERROR and LOG_CONS to print the log messages to the console
-	openlog("AESD Socket Application", LOG_PID | LOG_PERROR | LOG_CONS, LOG_USER);
+	openlog("AESD Socket Application2", LOG_PID | LOG_PERROR | LOG_CONS, LOG_USER);
 
 	// Status variable will store the return values of functions for error checking
 	int status;
@@ -246,6 +252,7 @@ int main(int argc, char *argv[])
 
 	SLIST_INIT(&head);
 
+#if (USE_AESD_CHAR_DEVICE == 0)	
 	// Initialize the mutex
 	status = pthread_mutex_init(&mutex_lock, NULL);
 	if(status != 0)
@@ -253,6 +260,8 @@ int main(int argc, char *argv[])
 		syslog(LOG_ERR, "ERROR: pthread_mutex_init() : %s\n", strerror(status));	
 		exit(EXIT_FAILURE);
 	}
+#endif
+
 #if (USE_AESD_CHAR_DEVICE == 0)
 	// Delete the file in case it exists
 	status = unlink(filepath);
@@ -666,7 +675,7 @@ void* socket_handler(void* thread_param)
 	// printf("Packet Size =  %d\n", packet_size);
 	// printf("total_data_size =  %d\n", total_data_size);
 	// printf("Storage array = \n%s", storage_array);
-			
+#if (USE_AESD_CHAR_DEVICE == 0)			
 	// Locking the mutex around the file operations
 	status = pthread_mutex_lock(&mutex_lock);
 	if(status != 0)
@@ -675,6 +684,7 @@ void* socket_handler(void* thread_param)
 		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
+#endif
 
 	int fd = open(filepath, O_CREAT|O_RDWR|O_APPEND, 0644);
 	if(fd == -1)
@@ -751,6 +761,7 @@ void* socket_handler(void* thread_param)
 
 	close(fd);
 
+#if (USE_AESD_CHAR_DEVICE == 0)	
 	status = pthread_mutex_unlock(&mutex_lock);
 	if(status != 0)
 	{
@@ -758,7 +769,7 @@ void* socket_handler(void* thread_param)
 		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
-
+#endif
 	params->thread_complete = true;
 	
 	// Closing connection here itself. Node will be deleted by cleanup thread

@@ -5,7 +5,7 @@
  * Based on the implementation of the "scull" device driver, found in
  * Linux Device Drivers example code.
  *
- * @author Dan Walkes
+ * @author Dan Walkes, Modified by Sanish Kharade
  * @date 2019-10-22
  * @copyright Copyright (c) 2019
  *
@@ -38,7 +38,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
 
-char *pointer;
+//char *pointer;
 void debug_print_string(char *s, size_t n);
 
 // To print strings without \0 at the end
@@ -57,9 +57,9 @@ void debug_print_string(char *s, size_t n)
 		}
 	}
 
-	//printk(KERN_CONT "\n");
 }
 
+// This function is called whenever a file refereing to this driver is opened
 int aesd_open(struct inode *inode, struct file *filp)
 {
 	PDEBUG("open\n\n");
@@ -141,6 +141,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	// 	return 0;
 	// }
 	// Since we are incrementing fpos, this will only return 10 entries and then return NULL by coming out of the loop
+
+	mutex_lock_interruptible(&(dev->lock));
+
 	read_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_cbuf), *f_pos, &read_offset);
 	if(read_entry != NULL)
 	{
@@ -152,6 +155,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	}
 	else
 	{
+		mutex_unlock(&(dev->lock));
 		return 0;
 	}
 	size_t rem_bytes = read_entry->size - read_offset;
@@ -191,7 +195,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	 * Since buf is a user space buffer we need to use copy_to_user to access it
 	 */
 
-
+	mutex_unlock(&(dev->lock));
 	PDEBUG("End of aesd_read function\n\n");
 	return retval;
 }
@@ -228,6 +232,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	static uint8_t write_complete = 1;
 
 	total_count += count;
+	mutex_lock_interruptible(&(dev->lock));
 	if(write_complete)
 	{
 		dev->aesd_cb_entry.buffptr = (char*)kmalloc(count, GFP_KERNEL);
@@ -235,17 +240,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		{
 			// handle error
 			PDEBUG("Unable to malloc\n");
+			mutex_unlock(&(dev->lock));
 			return retval;
 		}
-		// kmalloc count bytes, add sizeof(char)
-		// pointer = (char*)kmalloc(count, GFP_KERNEL);
-		// if(pointer == NULL)
-		// {
-		// 	// handle error
-		// 	PDEBUG("Unable to malloc\n");
-		// 	return retval;
-		// }
-		//memset(dev->aesd_cb_entry.buffptr, 0, count);
 
 		// use copy_from_user to copy data into kernel
 		size_t status = __copy_from_user((void*)(dev->aesd_cb_entry.buffptr), buf, count);
@@ -361,6 +358,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	// src and dest
 // if found put ot a write 
 
+	mutex_unlock(&(dev->lock));
 	PDEBUG("End of aesd_write function\n\n");
 	return count;
 	//return 2;	
@@ -417,6 +415,8 @@ int aesd_init_module(void)
 	 * Initialize locking primitive
 	 */
 	aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
+
+	mutex_init(&(aesd_device.lock));
 
 	/**
 	 * TODO: malloc the entry inside aesd device
