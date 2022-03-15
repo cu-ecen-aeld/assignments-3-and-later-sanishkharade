@@ -1,4 +1,23 @@
+/**
+ * @file    :   systemcalls.c
+ * @brief   :   This source file provides functions which is used to write specified data into a 
+ *				file who's path is given 
+ *              
+ *
+ * @author  :   Sanish Kharade, Daniel Walkes
+ * @date    :   January 27, 2022
+ * 
+ * 
+ * @link    :   Linux System Programming book - Chapter 5
+*/
+
 #include "systemcalls.h"
+#include <stdlib.h>		// for system()
+#include <unistd.h> 	// for execl()
+#include <sys/wait.h>	// for wait functions and macros
+#include <fcntl.h>
+
+#define MODE 0644
 
 /**
  * @param cmd the command to execute with system()
@@ -17,6 +36,16 @@ bool do_system(const char *cmd)
  *   or false() if it returned a failure
 */
 
+	int ret;
+	ret = system(cmd);
+	
+	// function failed
+	if(ret != 0)
+	{
+		return false;
+	}
+	
+	// function passed
     return true;
 }
 
@@ -48,7 +77,6 @@ bool do_exec(int count, ...)
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
     command[count] = command[count];
-
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -59,8 +87,46 @@ bool do_exec(int count, ...)
  *   
 */
 
-    va_end(args);
+	int status;
+	int ret;
+	pid_t pid;
+	
+	// Fork a new process
+	pid = fork();
+	
+	if (pid == -1)
+	{
+		// If fork() failed
+		perror("ERROR: fork"); 
+		exit(-1);
+	}
+	else if (pid == 0)
+	{
+		// If this is a child process 
+		ret = execv(command[0], command);
 
+		if (ret == -1)
+		{
+			perror("ERROR : execv");
+			exit(-1);
+		}
+	}
+	else
+	{
+		// If this is a parent process
+		if (waitpid (pid, &status, 0) == -1)
+		{	
+			perror("ERROR : wait");
+			return false;
+		}
+		if (! WIFEXITED(status) || WEXITSTATUS(status))
+		{
+			perror("Waitstatus");
+			return false;
+		}
+	}
+	
+    va_end(args);
     return true;
 }
 
@@ -92,8 +158,67 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *   
 */
-
-    va_end(args);
-    
+	
+	int status;
+	int ret;
+	pid_t pid;
+	
+	// Open the file we want to redirect standard out to
+	int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, MODE);
+	if (fd < 0)
+	{ 
+		perror("open"); 
+		return false;
+	}
+	
+	// Fork a new process
+	pid = fork ();
+	if (pid == -1)
+	{
+		// If fork() failed
+		perror("ERROR: fork"); 
+		return false;
+	}
+	else if (pid == 0)
+	{
+		// If this is a child process 
+		if (dup2(fd, 1) < 0)
+		{
+			perror("dup2"); 
+			return false;
+		}
+		close(fd);
+		
+		ret = execv(command[0], command);
+		if (ret == -1)
+		{
+			perror("ERROR : execv");
+			exit(-1);
+		}
+	}
+	else
+	{
+		// If this is a parent process
+		if (waitpid (pid, &status, 0) == -1)
+		{	
+			perror("wait");
+			close(fd);
+			return false;
+		}
+		if (! WIFEXITED(status) || WEXITSTATUS(status))
+		{
+			perror("Waitstatus");
+			close(fd);
+			return false ;
+		}
+	}
+	
+	close(fd);
+	va_end(args);
     return true;
 }
+
+
+
+
+
