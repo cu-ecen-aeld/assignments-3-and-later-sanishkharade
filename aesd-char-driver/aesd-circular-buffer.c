@@ -94,7 +94,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
 	// This buffer could be used by multiple drivers hence cannot free here
-    char *ret_entry_buf;
+    const char *ret_entry_buf;
 
 	// Set return buffer to in_offset buffer
 	ret_entry_buf = buffer->entry[buffer->in_offs].buffptr;

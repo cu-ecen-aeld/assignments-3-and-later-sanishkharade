@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
 
 	// Open the syslog for logging data
 	// Using LOG_PERROR and LOG_CONS to print the log messages to the console
-	openlog("AESD Socket Application2", LOG_PID | LOG_PERROR | LOG_CONS, LOG_USER);
+	openlog("AESD Socket Application8", LOG_PID | LOG_PERROR | LOG_CONS, LOG_USER);
 
 	// Status variable will store the return values of functions for error checking
 	int status;

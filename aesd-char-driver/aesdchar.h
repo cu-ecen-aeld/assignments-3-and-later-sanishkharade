@@ -37,7 +37,7 @@ struct aesd_dev
 	 */
 	
 	struct aesd_circular_buffer aesd_cbuf;
-	struct aesd_buffer_entry aesd_cb_entry;
+	struct aesd_buffer_entry *aesd_cb_entry;
 
 	struct mutex lock;
 

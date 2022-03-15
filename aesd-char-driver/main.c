@@ -114,41 +114,44 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 	PDEBUG("Start of aesd_read function\n");
-	ssize_t retval = 0;
+	ssize_t bytes_read = 0;
 
-	PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
+	//PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
 
 	struct aesd_buffer_entry *read_entry = NULL;
 	ssize_t read_offset = 0;
+	size_t rem_bytes = 0;
+	size_t unread_bytes;
 	
 	// For accessing the circular buffer
 	struct aesd_dev *dev;
 	dev = (struct aesd_dev *) filp->private_data;
 
+	/**
+	 * TODO: handle read
+	 * filep has the private_data member setup to aesd_dev by the open function
+	 * Thus we can access pointer to aesd_dev here
+	 * 
+	 * Since buf is a user space buffer we need to use copy_to_user to access it
+	 */
 
 	// offset
 	// when count > number of bytes left in current entry, bytes read = size - offset - 1
 	// user should update fpos = fpos + bytes read
 
 	// else bytes read = count
-	PDEBUG("Buffer status = %d, in_offset = %d, out_offset = %d\n",dev->aesd_cbuf.full, dev->aesd_cbuf.in_offs, dev->aesd_cbuf.out_offs);
-	// if( (dev->aesd_cbuf.in_offs == dev->aesd_cbuf.out_offs) && (dev->aesd_cbuf.full != true) )
-	// {
-	// 	// buffer is empty
-	// 	PDEBUG("Buffer is empty\n");
-	// 	return 0;
-	// }
-	// if(dev->aesd_cbuf.empty == true )
-	// {
-	// 	// buffer is empty
-	// 	PDEBUG("Buffer is empty\n");
-	// 	return 0;
-	// }
-	// Since we are incrementing fpos, this will only return 10 entries and then return NULL by coming out of the loop
+	//PDEBUG("Buffer status = %d, in_offset = %d, out_offset = %d\n",dev->aesd_cbuf.full, dev->aesd_cbuf.in_offs, dev->aesd_cbuf.out_offs);
+	PDEBUG("in_offset = %d, out_offset = %d, f_pos = %lld\n",dev->aesd_cbuf.in_offs, dev->aesd_cbuf.out_offs, *f_pos);
 
 	// Lock the resource
-	mutex_lock_interruptible(&(dev->lock));
+	//mutex_lock_interruptible(&(dev->lock));
+	if(mutex_lock_interruptible(&(dev->lock)) != 0)
+	{
+		printk(KERN_ALERT "Mutex lock failed in aesd_read \n");
+		//printk(KERN_ALERT "Mutex lock failed\n");
+		return -ERESTARTSYS;
 
+	}
 	read_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->aesd_cbuf), *f_pos, &read_offset);
 	if(read_entry != NULL)
 	{
@@ -156,31 +159,34 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 		PDEBUG("Entry = ");
 		debug_print_string(read_entry->buffptr, read_entry->size);
 		PDEBUG("Read_offset = %zu\n", read_offset);
-
 	}
 	else
 	{
+		// nothing more to read
 		mutex_unlock(&(dev->lock));
 		return 0;
 	}
-	size_t rem_bytes = read_entry->size - read_offset;
+	mutex_unlock(&(dev->lock));
+
+	rem_bytes = read_entry->size - read_offset;
 	if(count > rem_bytes)
 	{
-		retval = rem_bytes;
+		bytes_read = rem_bytes;
 	}
 	else
 	{
-		retval = count;
+		bytes_read = count;
 	}
-	// free memory in read??????????????????????????????????????
-	size_t status = __copy_to_user(buf, (void*)(read_entry->buffptr + read_offset), retval);
-	if(status != 0)
+	// free memory in read?????????????????????????????????????? - No
+	unread_bytes = __copy_to_user(buf, (void*)(read_entry->buffptr + read_offset), bytes_read);
+	if(unread_bytes != 0)
 	{
-		PDEBUG("Unable to copy all bytes to user\n");
+		printk(KERN_ALERT "Unable to copy all bytes to user\n");
+		return -EFAULT;
 	}
 	else
 	{
-		PDEBUG("Copied %ld bytes to user\n", retval);
+		printk(KERN_ALERT "Copied %ld bytes to user\n", bytes_read);
 	}
 	// dev->aesd_cbuf.out_offs = (dev->aesd_cbuf.out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
 	// if(dev->aesd_cbuf.out_offs == dev->aesd_cbuf.in_offs)
@@ -191,18 +197,12 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	// {
 	// 	dev->aesd_cbuf.empty = false;
 	// }
-	*f_pos += retval;
-	/**
-	 * TODO: handle read
-	 * filep has the private_data member setup to aesd_dev by the open function
-	 * Thus we can access pointer to aesd_dev here
-	 * 
-	 * Since buf is a user space buffer we need to use copy_to_user to access it
-	 */
+	*f_pos += bytes_read;
 
-	mutex_unlock(&(dev->lock));
+
+	// mutex_unlock(&(dev->lock));
 	PDEBUG("End of aesd_read function\n\n");
-	return retval;
+	return bytes_read;
 }
 /**
  *	@name 	: aesd_write
@@ -225,12 +225,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 {
 	PDEBUG("Start of aesd_write function\n");
 	ssize_t retval = -ENOMEM;
-	PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
+	//PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
 	char *overwritten_buf = NULL;
 	
 	static size_t total_count;
 
-	struct aesd_dev *dev;
+	struct aesd_dev *dev = NULL;
 	dev = (struct aesd_dev *) filp->private_data;
 	
 	// change to bool later
@@ -238,42 +238,57 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 
 	total_count += count;
 
+	size_t unwritten_bytes = 0;
 	/**
 	 * 	Check if the previous write was complete (complete if it had a \n character)
 	 * 		If it was then we need to malloc new memory for the current write operation
 	 * 
 	 */
-	mutex_lock_interruptible(&(dev->lock));
+	//mutex_lock_interruptible(&(dev->lock));
+	/**
+	 * 	All below operations use dev which is the file's private data
+	 * 	Hence these operations need to be locked by a mutex
+	 */
+	if(mutex_lock_interruptible(&(dev->lock)) != 0)
+	{
+		printk(KERN_ALERT "Mutex lock failed in aesd_write\n");
+		//printk(KERN_ALERT "Mutex lock failed\n");
+		return -ERESTARTSYS;
+
+	}
 	if(write_complete)
 	{
-		dev->aesd_cb_entry.buffptr = (char*)kmalloc(count, GFP_KERNEL);
-		if(dev->aesd_cb_entry.buffptr == NULL)
+		dev->aesd_cb_entry->buffptr = (char*)kmalloc(count, GFP_KERNEL);
+		if(dev->aesd_cb_entry->buffptr == NULL)
 		{
 			// handle error - use goto
-			PDEBUG("Unable to malloc\n");
+			printk(KERN_ALERT "Unable to mallocin aesd_write\n");
 			mutex_unlock(&(dev->lock));
-			return retval;
+			return -ENOMEM;
 		}
 
 		// use copy_from_user to copy data into kernel
-		size_t status = __copy_from_user((void*)(dev->aesd_cb_entry.buffptr), buf, count);
-		if(status != 0)
+		unwritten_bytes = __copy_from_user((void*)(dev->aesd_cb_entry->buffptr), buf, count);
+		if(unwritten_bytes != 0)
 		{
-			PDEBUG("Unable to copy all bytes into kernel\n");
+			printk(KERN_ALERT "Unable to copy all bytes into kernel\n");
+			mutex_unlock(&(dev->lock));
+			return -EFAULT;
 		}
 		else
 		{
-			PDEBUG("Copied %ld bytes into the kernel\n", count-status);
+			PDEBUG("Copied %ld bytes into the kernel\n", count-unwritten_bytes);
 		}
 	}
 	else
 	{
-		dev->aesd_cb_entry.buffptr = (char*)krealloc(dev->aesd_cb_entry.buffptr, total_count, GFP_KERNEL);
-		if(dev->aesd_cb_entry.buffptr == NULL)
+		dev->aesd_cb_entry->buffptr = (char*)krealloc(dev->aesd_cb_entry->buffptr, total_count, GFP_KERNEL);
+		if(dev->aesd_cb_entry->buffptr == NULL)
 		{
 			// handle error
-			PDEBUG("Unable to kmalloc\n");
-			return retval;
+			printk(KERN_ALERT "Unable to krealloc in aesd_write\n");
+			mutex_unlock(&(dev->lock));
+			return -ENOMEM;
 		}
 		// kmalloc count bytes, add sizeof(char)
 		// pointer = (char*)krealloc(pointer, total_count, GFP_KERNEL);
@@ -286,26 +301,28 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		//memset(pointer, 0, count);
 
 		// use copy_from_user to copy data into kernel
-		size_t status = __copy_from_user((void*)(dev->aesd_cb_entry.buffptr + total_count - count), buf, count);
-		if(status != 0)
+		unwritten_bytes = __copy_from_user((void*)(dev->aesd_cb_entry->buffptr + total_count - count), buf, count);
+		if(unwritten_bytes != 0)
 		{
-			PDEBUG("Unable to copy all bytes into kernel\n");
+			printk(KERN_ALERT "Unable to copy all bytes into kernel\n");
+			mutex_unlock(&(dev->lock));
+			return -EFAULT;
 		}
 		else
 		{
-			PDEBUG("Copied %ld bytes into the kernel\n", count-status);
+			PDEBUG("Copied %ld bytes into the kernel\n", count-unwritten_bytes);
 		}
 		
 	}
-	//memcpy(dev->aesd_cb_entry.buffptr + total_count, "\0", 1);
-	if(memchr(dev->aesd_cb_entry.buffptr, '\n', total_count) != NULL)
+	//memcpy(dev->aesd_cb_entry->buffptr + total_count, "\0", 1);
+	if(memchr(dev->aesd_cb_entry->buffptr, '\n', total_count) != NULL)
 	{
 		//pointer[total_count] = '\0';
-		dev->aesd_cb_entry.size = total_count;
+		dev->aesd_cb_entry->size = total_count;
 		total_count = 0;
 		write_complete = 1;
 		// add to buffer
-		overwritten_buf = aesd_circular_buffer_add_entry(&(dev->aesd_cbuf),&(dev->aesd_cb_entry));
+		overwritten_buf = aesd_circular_buffer_add_entry(&(dev->aesd_cbuf),(dev->aesd_cb_entry));
 		if(overwritten_buf != NULL)
 		{
 			PDEBUG("Freeing : %s\n", overwritten_buf);
@@ -318,7 +335,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	{
 		write_complete = 0;
 	}
-	//PDEBUG("pointer = %s, total_count = %zu, count = %zu, write_complete = %d\n", pointer, total_count, count, write_complete);
 
 	int j = 0;
 	for(j = 0; j < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; j++)
@@ -328,51 +344,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		debug_print_string(dev->aesd_cbuf.entry[j].buffptr, dev->aesd_cbuf.entry[j].size);
 	}
 
-
-
-/*
-	// Basic write test
-	// kmalloc count bytes
-	pointer = kmalloc(count, GFP_KERNEL);
-	if(pointer == NULL)
-	{
-		// handle error
-		PDEBUG("Unable to malloc\n");
-		return retval;
-	}
-	memset(pointer, 0, count);
-
-	// use copy_from_user to copy data into kernel
-	size_t status = __copy_from_user(pointer, buf, count);
-	if(status != 0)
-	{
-		PDEBUG("Unable to copy all bytes into kernel\n");
-	}
-	else
-	{
-		PDEBUG("Copied %ld bytes into the kernel\n", count-status);
-	}
-
-*/
-	//
-
-
-	/*
-	 *	go through string and find \n
-	 *	buf[count] = \n ??
-	 *	kmalloc(count)
-	*/
-	/// go through string and fin \n
-	// buf[count] = \n
-	// kmalloc(count)
-	// copy_frm user
-	// src and dest
-// if found put ot a write 
-
 	mutex_unlock(&(dev->lock));
 	PDEBUG("End of aesd_write function\n\n");
+
+	// return number of bytes written
 	return count;
-	//return 2;	
+
 }
 struct file_operations aesd_fops = {
 	.owner =    THIS_MODULE,
@@ -402,7 +379,7 @@ int aesd_init_module(void)
 {
 	dev_t dev = 0;
 	int result;
-	PDEBUG("Start of aesd_init_module function\n");
+	PDEBUG("Start of aesd_init_module function12\n");
 
 	/*
 	 *	int alloc_chrdev_region(dev_t * dev, unsigned baseminor, unsigned count, const char * name);
@@ -428,6 +405,13 @@ int aesd_init_module(void)
 	 */
 	aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
 
+	aesd_device.aesd_cb_entry = kmalloc(sizeof(struct aesd_buffer_entry), GFP_KERNEL);
+	if (aesd_device.aesd_cb_entry == NULL)
+	{
+		printk(KERN_ALERT "kmalloc failed in init function\n");
+		return -ENOMEM;
+	}
+
 	mutex_init(&(aesd_device.lock));
 
 	/**
@@ -438,7 +422,7 @@ int aesd_init_module(void)
 		unregister_chrdev_region(dev, 1);
 	}
 
-	PDEBUG("End of aesd_init_module function\n");
+	PDEBUG("End of aesd_init_module function8\n");
 	return result;
 
 }
@@ -446,6 +430,9 @@ int aesd_init_module(void)
 // This function is called when the module is unloaded
 void aesd_cleanup_module(void)
 {
+	uint8_t index;
+	struct aesd_buffer_entry *entry;
+
 	// Get the dev number from major and minor numbers
 	dev_t devno = MKDEV(aesd_major, aesd_minor);
 
@@ -459,8 +446,9 @@ void aesd_cleanup_module(void)
 	 * 
 	 */
 
-	uint8_t index;
-	struct aesd_buffer_entry *entry;
+	kfree(aesd_device.aesd_cb_entry);
+
+	// Free all non NULL entries in the circular buffer
 	AESD_CIRCULAR_BUFFER_FOREACH(entry, &(aesd_device.aesd_cbuf), index)
   	{
 		/*
