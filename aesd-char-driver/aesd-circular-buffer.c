@@ -115,7 +115,6 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 		// If there is no overwrite, NULL will be returned
 		ret_entry_buf = NULL;
 	}
-	buffer->empty = false;
 	
    	// Check if the buffer is full after the above update
 	if(buffer->in_offs == buffer->out_offs)
@@ -126,6 +125,8 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 	{
 		buffer->full = false;
 	}
+
+	// Return will be NULL if no overwrite happened
 	return ret_entry_buf;
 
 }
@@ -137,5 +138,4 @@ void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 
-	buffer->empty = true;
 }

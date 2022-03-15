@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
 
 	// Open the syslog for logging data
 	// Using LOG_PERROR and LOG_CONS to print the log messages to the console
-	openlog("AESD Socket Application8", LOG_PID | LOG_PERROR | LOG_CONS, LOG_USER);
+	openlog("AESD Socket Application", LOG_PID | LOG_PERROR | LOG_CONS, LOG_USER);
 
 	// Status variable will store the return values of functions for error checking
 	int status;
@@ -702,9 +702,11 @@ void* socket_handler(void* thread_param)
 		graceful_shutdown();
 		exit(EXIT_FAILURE);
 	}
+
 #if (USE_AESD_CHAR_DEVICE == 0)
 	lseek(fd, 0, SEEK_SET);
-#else 
+#else
+
 	close(fd);
 	fd = open(filepath, O_RDWR);
 	if(fd == -1)
@@ -715,6 +717,7 @@ void* socket_handler(void* thread_param)
 		exit(EXIT_FAILURE);
 	}
 #endif
+
 	/* Logic to read one byte from the file and send one byte at a time to client*/
 #if (USE_AESD_CHAR_DEVICE == 0)	
 	char a;

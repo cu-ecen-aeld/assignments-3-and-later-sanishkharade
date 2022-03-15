@@ -11,17 +11,15 @@
  *
  */
 
-
-// #ifdef __KERNEL__
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/cdev.h>
-#include <linux/fs.h> // file_operations
+#include <linux/fs.h> 		// file_operations
 
 #include <linux/slab.h>		// for kmalloc and kfree
-// #endif
+
 #ifdef __KERNEL__
 #include <linux/string.h>
 #else
@@ -33,15 +31,15 @@
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
-MODULE_AUTHOR("Sanish Kharade"); /** TODO: fill in your name **/
+MODULE_AUTHOR("Sanish Kharade");
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
 
-//char *pointer;
+
 void debug_print_string(char *s, size_t n);
 
-// To print strings without \0 at the end
+// Function to print strings without \0 at the end
 void debug_print_string(char *s, size_t n)
 {	
 	if(s == NULL)
@@ -56,7 +54,6 @@ void debug_print_string(char *s, size_t n)
 			printk(KERN_CONT "%c", s[i]);
 		}
 	}
-
 }
 
 // This function is called whenever a file refereing to this driver is opened
@@ -84,6 +81,7 @@ int aesd_open(struct inode *inode, struct file *filp)
 	return 0;
 
 }
+
 // This function is called whenever a file refereing to this driver is released
 int aesd_release(struct inode *inode, struct file *filp)
 {
@@ -93,6 +91,7 @@ int aesd_release(struct inode *inode, struct file *filp)
 	 */
 	return 0;
 }
+
 /**
  *	@name 	: aesd_read
  *
@@ -116,8 +115,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	PDEBUG("Start of aesd_read function\n");
 	ssize_t bytes_read = 0;
 
-	//PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
-
 	struct aesd_buffer_entry *read_entry = NULL;
 	ssize_t read_offset = 0;
 	size_t rem_bytes = 0;
@@ -140,15 +137,12 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	// user should update fpos = fpos + bytes read
 
 	// else bytes read = count
-	//PDEBUG("Buffer status = %d, in_offset = %d, out_offset = %d\n",dev->aesd_cbuf.full, dev->aesd_cbuf.in_offs, dev->aesd_cbuf.out_offs);
 	PDEBUG("in_offset = %d, out_offset = %d, f_pos = %lld\n",dev->aesd_cbuf.in_offs, dev->aesd_cbuf.out_offs, *f_pos);
 
 	// Lock the resource
-	//mutex_lock_interruptible(&(dev->lock));
 	if(mutex_lock_interruptible(&(dev->lock)) != 0)
 	{
 		printk(KERN_ALERT "Mutex lock failed in aesd_read \n");
-		//printk(KERN_ALERT "Mutex lock failed\n");
 		return -ERESTARTSYS;
 
 	}
@@ -156,9 +150,12 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	if(read_entry != NULL)
 	{
 		//PDEBUG("entry = %s, read_offset = %zu\n", read_entry->buffptr, read_offset);
+		// Uncomment the below loop to print the entry from which we are reading
+		/*
 		PDEBUG("Entry = ");
 		debug_print_string(read_entry->buffptr, read_entry->size);
 		PDEBUG("Read_offset = %zu\n", read_offset);
+		*/
 	}
 	else
 	{
@@ -177,7 +174,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	{
 		bytes_read = count;
 	}
-	// free memory in read?????????????????????????????????????? - No
+
 	unread_bytes = __copy_to_user(buf, (void*)(read_entry->buffptr + read_offset), bytes_read);
 	if(unread_bytes != 0)
 	{
@@ -188,20 +185,12 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	{
 		printk(KERN_ALERT "Copied %ld bytes to user\n", bytes_read);
 	}
-	// dev->aesd_cbuf.out_offs = (dev->aesd_cbuf.out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-	// if(dev->aesd_cbuf.out_offs == dev->aesd_cbuf.in_offs)
-	// {
-	// 	dev->aesd_cbuf.empty = true;
-	// }
-	// else
-	// {
-	// 	dev->aesd_cbuf.empty = false;
-	// }
+
 	*f_pos += bytes_read;
 
-
-	// mutex_unlock(&(dev->lock));
 	PDEBUG("End of aesd_read function\n\n");
+
+	// Return the number of bytes read
 	return bytes_read;
 }
 /**
@@ -225,7 +214,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 {
 	PDEBUG("Start of aesd_write function\n");
 	ssize_t retval = -ENOMEM;
-	//PDEBUG("buf = %s, count = %zu, fpos = %lld\n", buf, count, *f_pos);
+
 	char *overwritten_buf = NULL;
 	
 	static size_t total_count;
@@ -242,9 +231,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	/**
 	 * 	Check if the previous write was complete (complete if it had a \n character)
 	 * 		If it was then we need to malloc new memory for the current write operation
+	 * 		else we need to realloc the previoiusly assigned memory
 	 * 
 	 */
-	//mutex_lock_interruptible(&(dev->lock));
+
 	/**
 	 * 	All below operations use dev which is the file's private data
 	 * 	Hence these operations need to be locked by a mutex
@@ -252,7 +242,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	if(mutex_lock_interruptible(&(dev->lock)) != 0)
 	{
 		printk(KERN_ALERT "Mutex lock failed in aesd_write\n");
-		//printk(KERN_ALERT "Mutex lock failed\n");
 		return -ERESTARTSYS;
 
 	}
@@ -261,7 +250,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		dev->aesd_cb_entry->buffptr = (char*)kmalloc(count, GFP_KERNEL);
 		if(dev->aesd_cb_entry->buffptr == NULL)
 		{
-			// handle error - use goto
 			printk(KERN_ALERT "Unable to mallocin aesd_write\n");
 			mutex_unlock(&(dev->lock));
 			return -ENOMEM;
@@ -290,15 +278,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 			mutex_unlock(&(dev->lock));
 			return -ENOMEM;
 		}
-		// kmalloc count bytes, add sizeof(char)
-		// pointer = (char*)krealloc(pointer, total_count, GFP_KERNEL);
-		// if(pointer == NULL)
-		// {
-		// 	// handle error
-		// 	PDEBUG("Unable to malloc\n");
-		// 	return retval;
-		// }
-		//memset(pointer, 0, count);
 
 		// use copy_from_user to copy data into kernel
 		unwritten_bytes = __copy_from_user((void*)(dev->aesd_cb_entry->buffptr + total_count - count), buf, count);
@@ -317,17 +296,14 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	//memcpy(dev->aesd_cb_entry->buffptr + total_count, "\0", 1);
 	if(memchr(dev->aesd_cb_entry->buffptr, '\n', total_count) != NULL)
 	{
-		//pointer[total_count] = '\0';
 		dev->aesd_cb_entry->size = total_count;
 		total_count = 0;
 		write_complete = 1;
-		// add to buffer
+
 		overwritten_buf = aesd_circular_buffer_add_entry(&(dev->aesd_cbuf),(dev->aesd_cb_entry));
 		if(overwritten_buf != NULL)
 		{
-			PDEBUG("Freeing : %s\n", overwritten_buf);
-			// PDEBUG("Freeing : ");
-			// debug_print_string(overwritten_buf, dev->aesd_cbuf.entry[j].size);
+			//PDEBUG("Freeing : %s\n", overwritten_buf);
 			kfree(overwritten_buf);
 		}
 	}
@@ -336,6 +312,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		write_complete = 0;
 	}
 
+	// Uncomment the below loop to print the circular buffer on every write operation
+	/*
 	int j = 0;
 	for(j = 0; j < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; j++)
 	{
@@ -343,7 +321,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 		PDEBUG("Entry %d = ", j);
 		debug_print_string(dev->aesd_cbuf.entry[j].buffptr, dev->aesd_cbuf.entry[j].size);
 	}
-
+	*/
+	
 	mutex_unlock(&(dev->lock));
 	PDEBUG("End of aesd_write function\n\n");
 
@@ -351,6 +330,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff
 	return count;
 
 }
+
+// The file operations structure
 struct file_operations aesd_fops = {
 	.owner =    THIS_MODULE,
 	.read =     aesd_read,
@@ -359,6 +340,7 @@ struct file_operations aesd_fops = {
 	.release =  aesd_release,
 };
 
+// Setup the cdev member the aesd device structure
 static int aesd_setup_cdev(struct aesd_dev *dev)
 {
 	int err, devno = MKDEV(aesd_major, aesd_minor);
@@ -373,13 +355,12 @@ static int aesd_setup_cdev(struct aesd_dev *dev)
 	return err;
 }
 
-
-
+// This function runs when the module is loaded in the kernel
 int aesd_init_module(void)
 {
 	dev_t dev = 0;
 	int result;
-	PDEBUG("Start of aesd_init_module function12\n");
+	PDEBUG("Start of aesd_init_module function\n");
 
 	/*
 	 *	int alloc_chrdev_region(dev_t * dev, unsigned baseminor, unsigned count, const char * name);
@@ -405,6 +386,7 @@ int aesd_init_module(void)
 	 */
 	aesd_circular_buffer_init(&(aesd_device.aesd_cbuf));
 
+	// This memory is freed in cleanup function
 	aesd_device.aesd_cb_entry = kmalloc(sizeof(struct aesd_buffer_entry), GFP_KERNEL);
 	if (aesd_device.aesd_cb_entry == NULL)
 	{
@@ -422,7 +404,7 @@ int aesd_init_module(void)
 		unregister_chrdev_region(dev, 1);
 	}
 
-	PDEBUG("End of aesd_init_module function8\n");
+	PDEBUG("End of aesd_init_module function\n");
 	return result;
 
 }
@@ -464,7 +446,6 @@ void aesd_cleanup_module(void)
 	unregister_chrdev_region(devno, 1);
 }
 
-
-
+// Register the init and exit functions
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
